@@ -1,0 +1,11 @@
+# hard reasoning
+Prove or disprove: every bounded monotone sequence of real numbers converges. Explain rigorously but concisely.
+Design a rate limiter for a distributed API gateway: compare token bucket vs sliding window log, pick one, justify, and sketch the data model.
+A social app's feed ranking causes engagement but harms wellbeing metrics. Propose a ranking objective that trades these off, with the math and its failure modes.
+Debug this: a Python asyncio service leaks memory only under high concurrency; list the 5 most likely causes ranked, with how to confirm each.
+# general/creative
+Explain how a Mixture-of-Agents system can outperform its strongest member, and when it cannot.
+Write a 150-word executive summary arguing for (or against) self-hosting an LLM router vs using a single provider.
+# code
+Implement an LRU cache with TTL in Python without using functools; include complexity analysis.
+Given a Postgres table of (ts, alias, tokens), write one SQL query returning each alias's share of total tokens per day for the last 7 days.

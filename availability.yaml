@@ -1,0 +1,15 @@
+# Provider on/off mask — read fresh every request, no restart. Per-request
+# [AVAILABLE:]/[UNAVAILABLE:] tags override. Cost order in comments.
+providers:
+  nim:
+    available: true
+    note: "NVIDIA NIM — free workhorse (load-variable latency)"
+  zen:
+    available: true
+    note: "opencode Zen — per-token; free-tier models are $0"
+  anthropic:
+    available: true
+    note: "Claude Max OAuth — flat-rate subscription via Claude Code; ant-* aliases; proxy on :4041"
+  copilot:
+    available: false   # 402 credits exhausted 2026-07-07 — restore on monthly reset
+    note: "GitHub Copilot — per-request credit; frontier / last resort"

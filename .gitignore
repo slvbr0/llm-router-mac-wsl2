@@ -1,0 +1,18 @@
+.env
+model_health.yaml
+__pycache__/
+*.pyc
+.pytest_cache/
+# runtime logs & bench receipts — curated results live in docs/BENCHMARKS.md
+logs/*.csv
+logs/*.json
+logs/*.jsonl
+logs/*.err
+logs/*.log
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# paid-trigger runtime file (created by start.sh; bind-mounted; churns at runtime)
+.llmr-refresh-trigger

@@ -1,0 +1,4 @@
+Prove or disprove: every bounded monotone sequence of real numbers converges. Explain rigorously but concisely.
+Design a rate limiter for a distributed API gateway: compare token bucket vs sliding window log, pick one, justify, and sketch the data model.
+Implement an LRU cache with TTL in Python without using functools; include complexity analysis.
+Explain how a Mixture-of-Agents system can outperform its strongest member, and when it cannot.

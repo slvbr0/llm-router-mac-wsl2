@@ -1,0 +1,107 @@
+# Fusion v2.0 config — panels are provider-diverse (MoA's edge) and tunable here.
+# Practicality rule: default panels use FAST-capable models (incl. paid cop-haiku);
+# slow reasoning heavyweights (cop-sonnet/zen-gpt/qwen-max/deepseek) live in `deep`,
+# reached only via [NOVEL DEEP] when you want max quality and will wait.
+# Panels = free pool + paid pool + target size + paid_anchor. build_panel() checks NIM
+# health first, then MIXES: `paid_anchor` paid models are always included (quality/diversity),
+# the rest is filled from healthy FREE models, and paid backfills only when free is short.
+# → cheap when free NIM is healthy, more paid (reliable) when it's degraded.
+panels:
+  # Fusion is deliberate quality mode — slow-but-capable models are WELCOME. Timeouts are
+  # generous (200s+ is fine: minutes to save 10-100x on price). The health audit categorizes
+  # by latency; fusion tolerates "decent" (not just "fast") responders. Interactive Phase-1
+  # routing stays fast; fusion does not.
+  easy:                                        # short/simple — free-only (cheapest); paid only backfills
+    free: [nim-mistral, zen-free-deepseek, zen-deepseek-flash, nim-llama, nim-kimi]
+    paid: [cop-haiku]
+    size: 3
+    paid_anchor: 0
+    aggregator: [nim-mistral, nim-llama, cop-haiku]
+    timeout_s: 60
+  hard:                                        # default code/reason/agent — mostly free + 1 paid anchor
+    free: [nim-qwen-max, zen-glm, zen-kimi, nim-deepseek, nim-mistral, zen-free-deepseek, nim-kimi]
+    paid: [cop-haiku, cop-sonnet]
+    size: 4
+    paid_anchor: 1
+    aggregator: [zen-glm, nim-qwen-max, nim-mistral, cop-sonnet]
+    timeout_s: 120                             # capable reasoning models allowed to take their time
+  deep:                                        # [NOVEL DEEP] — heavyweight, 2 paid anchors, max quality
+    free: [zen-glm, zen-qwen-max, zen-deepseek, nim-qwen-max, nim-deepseek, nim-nemotron, nim-mistral]
+    paid: [cop-opus, cop-sonnet]        # zen-gpt dropped: credits lane 401s on every call
+    size: 5
+    paid_anchor: 2
+    aggregator: [zen-glm, cop-opus, nim-qwen-max, nim-mistral]
+    timeout_s: 300                             # frontier reasoning (cop-opus ~205s) — let it finish
+research:
+  council_models: "gpt54,claude_sonnet,gemini_pro"        # pwm council -m
+  chairman: sonar
+min_proposers: 2
+proposer_timeout_s: 90              # default straggler cap (per-panel timeout_s overrides)
+proposer_max_tokens: 900            # bound proposer generation time
+aggregator_max_tokens: 1500         # aggregator may need more room to synthesize
+cost:                               # receipt estimation
+  zen_paid_usd_per_1m: 3.0
+  copilot_usd_per_credit: 0.04
+  zen_paid_aliases: [zen-gpt]     # per-token credits lane only
+  zen_go_aliases: [zen-glm, zen-deepseek, zen-kimi, zen-minimax, zen-qwen-max, zen-mimo, zen-deepseek-flash]  # GO subscription: flat-rate, $0 marginal
+  # LIST PRICE, usd per 1M tokens [input, output]. NOT what we pay — NIM is free, GO and
+  # Anthropic Max are flat-rate subscriptions, so our marginal cost is ~$0 on every arm.
+  # This table answers the only question a reader cares about: what would this have cost at
+  # public API rates? Output covers extended-thinking tokens (Anthropic bills them as output),
+  # which is why a HIGH thinking budget is expensive on frontier models and free on NIM.
+  # GLM 5.2 is quoted as a range; we take the upper bound so fusion is never flattered.
+  list_usd_per_1m:
+    ant-fable:   [10.0, 50.0]
+    ant-opus:    [5.0,  25.0]
+    ant-sonnet:  [3.0,  15.0]
+    ant-haiku:   [1.0,   5.0]
+    zen-glm:     [1.40,  4.40]
+    nim-glm:     [1.40,  4.40]
+    zen-kimi:    [0.95,  4.00]
+    nim-kimi:    [0.95,  4.00]
+    zen-minimax: [0.30,  1.20]
+    nim-minimax: [0.30,  1.20]
+bench:
+  baseline: ant-fable   # frontier reference: Fable 5 + HIGH thinking. (copilot credits exhausted
+                        # until the 2026-08-01 monthly reset; cop-* return 200 with EMPTY content,
+                        # so "it answered" is not "it worked". Masked in availability.yaml.)
+  judge: ant-haiku      # outside both arms. Shares a family with the baseline, so any bias runs
+                        # TOWARD fable and AGAINST the fusion hypothesis — a conservative judge.
+  judge_b: zen-glm      # second opinion; disagreement gets reported, not discarded
+conductor:
+  enabled: true                # [NOVEL] uses the conductor loop by default (self-limits by score)
+  # Conductor = capable orchestrator, chosen DYNAMICALLY (pick_conductor): fastest HEALTHY NIM
+  # candidate by measured latency; else a capable opencode-go (Zen) model like GLM 5.2; else
+  # Copilot. Lists below are the *capable candidate pool* per difficulty (NIM first, then paid).
+  models:
+    easy: [nim-mistral, nim-glm, nim-kimi, zen-deepseek-flash, zen-glm]
+    hard: [nim-glm, nim-qwen-max, nim-deepseek, nim-mistral, zen-glm, zen-qwen-max, cop-sonnet]
+    deep: [nim-qwen-max, nim-glm, nim-deepseek, nim-nemotron, zen-glm, zen-qwen-max, cop-opus]
+  score_threshold: 8           # stop once best score >= this
+  max_rounds: 3                # candidate evaluations beyond round 0 (cost cap)
+  improve_epsilon: 1           # score gain that counts as "improved" -> keep deepening
+  refine_max_tokens: 4000      # reasoning models need room to think AND still emit the format
+  timeout_s: 300               # conductor is a capable (slow) model — cop-opus ~205s; let it finish
+abmcts:                             # v2.1.1 [NOVEL TREE] — Multi-LLM AB-MCTS
+  budget: {easy: 6, hard: 12, deep: 20}   # node generations per call
+  judge: [zen-glm, cop-haiku, nim-kimi]   # pairwise FALLBACK CHAIN; zen-glm first (GO flat-rate, reliable)
+  judge_timeout_s: 120
+  judge_max_tokens: 300
+  gen_max_tokens: 4000
+  gen_timeout_s: 300                # wait reasoning models out — never truncate mid-think
+  early_stop_wins: 4                # incumbent survives K straight challenges -> stop
+  sigma0: 0.15                      # Thompson exploration width
+  prior_weight: 2                   # n0 pseudo-observations behind each prior
+  elo_k: 0.1                        # rating update step (ratings live in [0,1])
+  prior_rank:                       # capability-only, provider-blind; unlisted alias -> base
+    # Committee anchors are Anthropic sonnet/opus (Max flat-rate) + copilot. NOT fable — fable is
+    # the BASELINE we are trying to match, so it never sits inside the committee it is judged
+    # against. The question the bench answers: can free-NIM + GO + sonnet/opus, mixed in whatever
+    # ratio the bandit finds, reach fable quality at fable-or-lower cost.
+    # zen-gpt removed 2026-07-10: AuthenticationError on every call (credits lane exhausted). Paid
+    # aliases skip health gating in build_pool, so a dead one is never filtered out — and a
+    # `frontier` prior makes the bandit's optimistic prior pull it FIRST, burning generation
+    # steps on an arm that cannot answer. Re-add once a probe with fallbacks off serves itself.
+    frontier: [ant-opus, ant-sonnet, cop-opus, cop-sonnet, cop-gemini]
+    strong:   [zen-glm, zen-qwen-max, zen-kimi, zen-deepseek, zen-minimax, nim-qwen-max, nim-glm, nim-deepseek, nim-kimi]
+    base:     [nim-mistral, nim-minimax, nim-nemotron, zen-free-deepseek, zen-deepseek-flash, zen-mimo, nim-qwen, nim-llama]

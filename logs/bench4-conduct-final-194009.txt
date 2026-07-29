@@ -1,0 +1,19 @@
+[1/4] fusing…
+[2/4] fusing…
+[3/4] fusing…
+[4/4] fusing…
+
+prompt                                            diff  fus base  f_tok  b_tok
+Prove or disprove: every bounded monotone sequ    hard   10    3   2860   6068
+Design a rate limiter for a distributed API ga    easy    9    7   5163   2718
+Implement an LRU cache with TTL in Python with    hard    7    9   4628   3304
+Explain how a Mixture-of-Agents system can out    easy    8    7   3892   2642
+
+(scored 4/4 prompts; unparseable judge outputs excluded)
+
+FUSION  avg quality 8.50  est cost $0.0800  → $/point 0.0094
+BASELINE(cop-opus) avg quality 6.50  est cost $0.1600  → $/point 0.0246
+
+LATENCY  fusion avg 55s  vs  baseline avg 635s
+
+VERDICT: fusion matches/beats baseline at lower cost — hypothesis SUPPORTED

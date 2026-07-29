@@ -1,0 +1,37 @@
+
+
+Start a session
+
+OrbStack running
+llmr-start (TUI) or llmr-start up + open the app
+type normally — routing automatic
+close opencode when done
+
+Make sure OrbStack app is running (containers auto-start with it), then in Terminal:
+
+
+sh "<repo-root>/scripts/start.sh"
+
+Terminal opencode (TUI)	llmr-start (or the full sh "…/start.sh")
+The opencode app	llmr-start up → brings router up + audits NIM → then open the app
+
+
+That one command: brings the router up if needed → checks health → runs the NIM audit (~11s) → launches opencode. First time only, pick llm-router/auto in /models (it's remembered after).
+Then just talk. No tagging — routing is automatic per prompt.
+During a session
+	•	/usage — tokens, free-vs-paid saved, quotas
+	•	research/audit — just ask; agent proposes Perplexity (or prefix research: / [R] / audit: to force)
+	•	NIM feels slow → sh scripts/nim_health.sh (re-audit)
+	•	force a model → [THINK], [CODE], [FRONTIER] (optional)
+End a session
+Close opencode (Ctrl-C or exit). That's it — router can stay up 24/7 (idle ≈ zero cost). Optionally:
+
+
+sh scripts/stop.sh          # snapshot audit CSV, leave router running
+sh scripts/stop.sh --down   # snapshot + stop containers (data kept)
+Minimum daily reality
+	•	Start: OrbStack running + sh scripts/start.sh → land in opencode.
+	•	Work: type normally; routing + compression + memory + /usage all automatic.
+	•	End: close opencode. Leave the rest up.
+
+

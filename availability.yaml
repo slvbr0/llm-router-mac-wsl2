@@ -1,15 +1,18 @@
 # Provider on/off mask — read fresh every request, no restart. Per-request
-# [AVAILABLE:]/[UNAVAILABLE:] tags override. Cost order in comments.
+# [AVAILABLE:]/[UNAVAILABLE:] tags override.
+#
+# ONLY list a provider you actually need to force OFF. Every provider in PRIORITY_CHAIN
+# defaults to available:true, so an absent provider is ON — nothing to declare.
+#
+# Flat/paid providers (anthropic, codex, zai, zen GO/paid) are deliberately NOT listed:
+# a subscription that authenticates works, so there is nothing to gate. Their auth is
+# confirmed once at startup instead — the OAuth proxies' {creds:true} and zai_auth.sh —
+# and never by calling a model, which would spend quota for no information. Same reason
+# scripts/nim_health.sh probes free aliases only.
 providers:
   nim:
     available: true
-    note: "NVIDIA NIM — free workhorse (load-variable latency)"
-  zen:
-    available: true
-    note: "opencode Zen — per-token; free-tier models are $0"
-  anthropic:
-    available: true
-    note: "Claude Max OAuth — flat-rate subscription via Claude Code; ant-* aliases; proxy on :4041"
+    note: "NVIDIA NIM — free workhorse; load-variable, so latency-gated by model_health.yaml"
   copilot:
     available: false   # 402 credits exhausted 2026-07-07 — restore on monthly reset
     note: "GitHub Copilot — per-request credit; frontier / last resort"

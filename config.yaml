@@ -56,6 +56,19 @@ model_list:
   - model_name: zai-flash
     litellm_params: {model: anthropic/glm-4.7, api_base: https://api.z.ai/api/anthropic, api_key: os.environ/ZAI_API_KEY}
 
+  # ===== Codex / ChatGPT subscription (flat-rate) via providers/codex_oauth_proxy.py =====
+  # The subscription serves GPT ONLY through chatgpt.com/backend-api/codex/responses (Responses
+  # API, stream-only). api.openai.com 401s (missing scope) / 429s (no PAYG balance), so the local
+  # proxy on :4042 translates chat/completions <-> Responses. Cost class 3 — same flat band as
+  # Anthropic Max. Fills a real gap: zen-gpt 401s and cop-gpt fails via LiteLLM's Copilot path,
+  # so this is the only working GPT lane. Tool-calling verified live.
+  - model_name: cod-luna
+    litellm_params: {model: openai/gpt-5.6-luna, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}   # ~0.9s, fastest
+  - model_name: cod-terra
+    litellm_params: {model: openai/gpt-5.6-terra, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}  # ~1.0s, mid
+  - model_name: cod-sol
+    litellm_params: {model: openai/gpt-5.6-sol, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}    # ~2.8s, strongest; takes reasoning_effort
+
   # ===== opencode Zen (per-token; conserve). IDs verified at build (Task 8). =====
   - model_name: zen-gpt
     litellm_params: {model: openai/gpt-5.5, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}

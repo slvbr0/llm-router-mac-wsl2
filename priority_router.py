@@ -70,6 +70,8 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
     ],
     # Claude Max subscription via OAuth (flat-rate, rate-limited by Anthropic)
     "anthropic": ["ant-fable", "ant-opus", "ant-sonnet", "ant-haiku"],
+    # Codex/ChatGPT subscription (flat) via providers/codex_oauth_proxy.py on :4042.
+    "codex": ["cod-sol", "cod-terra", "cod-luna"],
 }
 
 # Tiers: NIM first (health-gated) -> Zen (free before paid) -> ant-* -> Copilot tail.
@@ -78,18 +80,18 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # Copilot path (GPT needs the /responses API). Use Claude/Gemini Copilot + Zen's
 # GPT (zen-gpt) for GPT needs instead. GPT-via-Copilot kept in config but unused.
 CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
-CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
+GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cod-luna", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cod-terra", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
-REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "zen-free-ling", "zen-free-mimo", "zen-free-north", "mist-medium", "mist-magistral", "nim-inkling", "nim-nemotron", "zai-52", "zai-51", "zen-glm", "zen-qwen-max", "zen-free-nemotron", "ant-sonnet", "cop-opus"]  # zen-free-*/mist-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
-AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mist-large", "mist-medium", "zai-turbo", "zen-glm", "zen-minimax", "ant-sonnet", "cop-sonnet"]
+REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "zen-free-ling", "zen-free-mimo", "zen-free-north", "mist-medium", "mist-magistral", "nim-inkling", "nim-nemotron", "zai-52", "zai-51", "zen-glm", "zen-qwen-max", "zen-free-nemotron", "ant-sonnet", "cod-sol", "cop-opus"]  # zen-free-*/mist-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
+AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mist-large", "mist-medium", "zai-turbo", "zen-glm", "zen-minimax", "ant-sonnet", "cod-terra", "cop-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
 # zen-gpt dropped (dead: 401). Config order = intent (frontier is not latency-sorted).
-FRONTIER_TIER = ["nim-glm", "nim-minimax", "mist-medium", "zai-52", "zen-glm", "zen-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cop-opus", "cop-sonnet", "cop-gemini"]  # mist-medium(free)/zai-52(flat) reasoners between free NIM and GO
+FRONTIER_TIER = ["nim-glm", "nim-minimax", "mist-medium", "zai-52", "zen-glm", "zen-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "cop-opus", "cop-sonnet", "cop-gemini"]  # mist-medium(free)/zai-52(flat) reasoners between free NIM and GO
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (zen-glm, ant-sonnet/opus
 # Max flat-rate, GO reasoners, nim-glm free) carry every verdict. The near-frontier brains
@@ -120,6 +122,8 @@ GO_THINKING  = frozenset({"zen-glm", "zen-kimi", "zen-minimax", "zen-grok", "zen
                           # gpt-5.6 luna/terra/sol take reasoning_effort too. minimax excluded: no CoT).
                           "zen-paid-glm", "zen-paid-qwen-plus", "zen-paid-qwen-max", "zen-paid-grok",
                           "zen-paid-kimi3", "zen-paid-luna", "zen-paid-terra", "zen-paid-sol"})
+# Codex reasoners: the proxy maps OpenAI `reasoning_effort` -> Responses `reasoning.effort`.
+COD_THINKING = frozenset({"cod-sol"})
 ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku excluded
 # opencode Zen FREE-tier native reasoners. Verified live: they emit a reasoning_content trace by
 # DEFAULT with no param, and reasoning_effort only REDUCES that trace. Free, so never a reason to
@@ -139,7 +143,7 @@ NATIVE_REASONERS = FREE_REASONERS | MIST_REASONERS | NIM_NATIVE
 # thinking block {"type":"enabled","budget_tokens":N} and return a `thinking` content block. Same
 # injection + budget table as ANT_THINKING (think-class "ant"), even though cost-wise they're flat.
 ZAI_THINKING  = frozenset({"zai-52", "zai-51"})
-ALL_THINKING  = NIM_THINKING | GO_THINKING | ANT_THINKING | ZAI_THINKING | NATIVE_REASONERS
+ALL_THINKING  = NIM_THINKING | GO_THINKING | ANT_THINKING | ZAI_THINKING | COD_THINKING | NATIVE_REASONERS
 
 # (class, level) -> budget_tokens
 _THINK_TOKENS: Dict[Tuple[str, str], int] = {
@@ -165,6 +169,7 @@ def _model_think_class(model: str) -> Optional[str]:
     if model in NIM_THINKING:     return "nim"
     if model in GO_THINKING:      return "go"
     if model in ANT_THINKING or model in ZAI_THINKING: return "ant"  # Anthropic thinking-block shape
+    if model in COD_THINKING:     return "go"   # Codex takes the same effort knob (no token budget)
     if model in NATIVE_REASONERS: return "free"
     return None
 
@@ -348,18 +353,19 @@ ZEN_GO_ALIASES = {"zen-glm", "zen-deepseek", "zen-kimi", "zen-minimax",
 
 def _cost_class(model: str) -> int:
     # Marginal-cost order (all flat/sunk subs rank before real-per-token spend):
-    #   0 free  ->  1 z.ai flat  ->  2 GO flat  ->  3 Anthropic Max flat  ->  4 zen paid  ->  5 copilot
-    # z.ai flat leads the paid-flat band (user tests its limits first); Anthropic Max (sunk) is used
-    # before spending zen per-token credits; zen paid is the real-money backstop; copilot last.
+    #   0 free  ->  1 GO flat  ->  2 z.ai flat  ->  3 Anthropic Max + Codex flat  ->  4 zen paid  ->  5 copilot
+    # GO flat leads the flat band, then z.ai. Anthropic Max and the Codex/ChatGPT subscription are
+    # both sunk-cost flat, so they SHARE class 3 and compete on measured latency rather than one
+    # always draining first. zen paid is the real-money backstop; copilot last.
     p = MODEL_PROVIDER.get(model, "")
     if p == "nim" or p == "mistral" or model.startswith("zen-free-"):
         return 0                       # free (NIM + Mistral free tier + zen free-tier)
-    if p == "zai":
-        return 1                       # z.ai GLM Coding Plan (flat-rate)
     if model in ZEN_GO_ALIASES:
-        return 2                       # opencode GO subscription flat-rate
-    if p == "anthropic":
-        return 3                       # Claude Max OAuth (flat-rate; opus gated to invoke tiers)
+        return 1                       # opencode GO subscription flat-rate
+    if p == "zai":
+        return 2                       # z.ai GLM Coding Plan (flat-rate)
+    if p == "anthropic" or p == "codex":
+        return 3                       # Claude Max OAuth + Codex/ChatGPT subscription (both flat/sunk)
     if p == "zen":
         return 4                       # zen per-token paid credits ($20 backstop)
     return 5                           # copilot per-request credit
@@ -501,12 +507,15 @@ class PriorityRouter(CustomLogger):
                 # NO param (reasoning_effort only shrinks it; Mistral has no toggle at all). Inject
                 # nothing — annotate high, let them run.
                 pass
-            elif final_model in GO_THINKING:
+            elif final_model in GO_THINKING or final_model in COD_THINKING:
                 # opencode GO validates its request body strictly and rejects NIM's parameter
                 # names: 400 "Unsupported parameter(s): `thinking_budget_tokens`,
                 # `enable_thinking`". It takes an OpenAI-style effort knob instead, with no token
                 # budget. Sending the NIM pair here 400s every zen-* reason/code/agent/frontier
                 # call; a fallback then answers and the failure never surfaces.
+                # Codex is the same shape: codex_oauth_proxy.py reads reasoning_effort off the
+                # request and emits Responses-API `reasoning: {effort}`. It also REJECTS
+                # max_output_tokens, so no token budget is sent on this lane either.
                 data.setdefault("extra_body", {})["reasoning_effort"] = level
             else:
                 # NVIDIA NIM ALSO rejects enable_thinking/thinking_budget_tokens (same 400). GLM's

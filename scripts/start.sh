@@ -32,6 +32,9 @@ sh scripts/start_oauth_proxy.sh
 echo "②b z.ai auth (paid — creds check only, no model probing)…"
 sh scripts/zai_auth.sh
 
+echo "②c Codex/ChatGPT OAuth shim…"
+sh scripts/start_codex_proxy.sh
+
 echo "③ NIM latency audit…"
 sh scripts/nim_health.sh
 sh scripts/install_health_timer.sh   # 15-min background re-audit while session up

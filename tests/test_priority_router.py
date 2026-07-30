@@ -507,8 +507,8 @@ def test_orch_brains_get_high_thinking_via_go_shape():
     assert r2["extra_body"]["reasoning_effort"] == "high"
 
 def test_orch_brains_are_flatrate_cost_class():
-    # GO flat-rate (class 2 after z.ai flat), not per-token/anthropic
-    assert pr._cost_class("zen-kimi-k3") == 2 and pr._cost_class("zen-grok") == 2
+    # GO flat-rate leads the flat band (class 1), not per-token/anthropic
+    assert pr._cost_class("zen-kimi-k3") == 1 and pr._cost_class("zen-grok") == 1
 
 def test_orch_l2_capables_in_tier():
     for m in ("zen-qwen-max", "zen-qwen-plus", "zen-deepseek", "zen-minimax", "zen-mimo"):
@@ -582,23 +582,24 @@ def test_provider_map_knows_mistral_and_zai():
     assert pr.MODEL_PROVIDER["zai-flash"] == "zai"
 
 
-def test_cost_class_cascade_free_zai_go_ant_paid_copilot():
+def test_cost_class_cascade_free_go_zai_flat_paid_copilot():
     # The whole ordering intent in one assertion: strictly increasing marginal cost.
     assert pr._cost_class("mist-large") == 0        # Mistral free
     assert pr._cost_class("nim-glm") == 0           # NIM free
-    assert pr._cost_class("zai-52") == 1            # z.ai flat  (BEFORE GO)
-    assert pr._cost_class("zen-glm") == 2           # GO flat
+    assert pr._cost_class("zen-glm") == 1           # GO flat   (BEFORE z.ai)
+    assert pr._cost_class("zai-52") == 2            # z.ai flat
     assert pr._cost_class("ant-sonnet") == 3        # Anthropic Max flat (BEFORE zen paid)
+    assert pr._cost_class("cod-sol") == 3           # Codex flat SHARES the Anthropic band
     assert pr._cost_class("zen-paid-glm") == 4      # zen per-token
     assert pr._cost_class("cop-opus") == 5          # copilot per-request
 
 
-def test_zai_flat_ranks_before_go_in_reason_tier():
-    # Sorted reason tier: free (mist/nim/zen-free) then z.ai(1) then GO zen-glm(2) then ant(3).
+def test_go_flat_ranks_before_zai_in_reason_tier():
+    # Sorted reason tier: free (mist/nim/zen-free) then GO zen-glm(1) then z.ai(2) then ant(3).
     ordered = pr.order_tier(pr.REASON_TIER, {})
-    assert ordered.index("zai-52") < ordered.index("zen-glm")
-    assert ordered.index("mist-medium") < ordered.index("zai-52")   # free before flat
-    assert ordered.index("ant-sonnet") > ordered.index("zen-glm")   # anth after GO
+    assert ordered.index("zen-glm") < ordered.index("zai-52")
+    assert ordered.index("mist-medium") < ordered.index("zen-glm")  # free before flat
+    assert ordered.index("ant-sonnet") > ordered.index("zai-52")    # anth after both flats
 
 
 def test_anthropic_flat_ranks_before_zen_paid():
@@ -657,13 +658,42 @@ def test_nim_step_is_free_native_reasoner_no_param():
     assert r["metadata"]["llmr_ann"]["think"] == "high"       # annotated high
 
 
-def test_zai_flat_beats_go_when_free_reasoners_health_gated():
+def test_go_flat_beats_zai_when_free_reasoners_health_gated():
     # Cost cascade at the routing level: knock the free zen reasoners out via health, and the
-    # reason tier serves z.ai flat (class 1) before GO zen-glm (class 2). NIM/Mistral gated off.
+    # reason tier serves GO zen-glm (class 1) before z.ai (class 2). NIM/Mistral gated off.
     health = {m: {"ok": False} for m in ("zen-free-ling", "zen-free-mimo", "zen-free-north",
                                           "zen-free-nemotron")}
     r = route("[REASON] prove the halting problem",
               avail={"mistral": False, "nim": False, "zai": True, "zen": True,
                      "anthropic": True, "copilot": True},
               health=health)
-    assert r == "zai-52"        # z.ai flat beats GO zen-glm
+    assert r == "zen-glm"       # GO flat beats z.ai
+
+
+# --- Codex / ChatGPT subscription (flat, class 3 alongside Anthropic) -------------------------
+
+def test_codex_shares_the_anthropic_flat_band():
+    # Both are sunk-cost subscriptions: neither should always drain before the other.
+    for m in ("cod-sol", "cod-terra", "cod-luna"):
+        assert pr._cost_class(m) == pr._cost_class("ant-sonnet") == 3
+
+
+def test_codex_ranks_after_free_and_both_flats_but_before_zen_paid():
+    tier = ["zen-paid-glm", "cod-luna", "zai-52", "zen-glm", "nim-glm"]
+    assert pr.order_tier(tier, {}) == ["nim-glm", "zen-glm", "zai-52", "cod-luna", "zen-paid-glm"]
+
+
+def test_codex_reasoner_gets_effort_knob_not_thinking_block():
+    # cod-sol takes reasoning_effort (proxy -> Responses `reasoning.effort`). Sending the
+    # Anthropic thinking block or NIM's enable_thinking here 400s and a fallback hides it.
+    r = _hook({"model": "cod-sol", "messages": [{"role": "user", "content": "[REASON] prove it"}]})
+    assert r["extra_body"]["reasoning_effort"] in ("medium", "high")
+    assert "thinking" not in r
+    assert "chat_template_kwargs" not in r.get("extra_body", {})
+
+
+def test_codex_non_reasoners_get_no_thinking_param():
+    for m in ("cod-luna", "cod-terra"):
+        r = _hook({"model": m, "messages": [{"role": "user", "content": "[REASON] x"}]})
+        assert "thinking" not in r
+        assert "reasoning_effort" not in r.get("extra_body", {})

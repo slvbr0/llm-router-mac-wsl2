@@ -4,11 +4,11 @@ One OpenAI-compatible endpoint, many free and cheap models behind it, cost disci
 
 ## What it does
 
-It exposes a single OpenAI-compatible endpoint at `http://localhost:4040/v1`. The port is configurable in `docker-compose.yml` or with `--port`. Behind it sit a dozen-plus models across NVIDIA NIM, Mistral, opencode Zen, z.ai GLM, Claude via OAuth, and GitHub Copilot; clients ask for model `auto` and the router picks a real model per request.
+It exposes a single OpenAI-compatible endpoint at `http://localhost:4040/v1`. The port is configurable in `docker-compose.yml` or with `--port`. Behind it sit a dozen-plus models across NVIDIA NIM, Mistral, opencode Zen, z.ai GLM, Claude via OAuth, Codex/ChatGPT via OAuth, and GitHub Copilot; clients ask for model `auto` and the router picks a real model per request.
 
 ## How it decides
 
-Free tiers drain first. NIM and Mistral cost nothing, so they get tried before anything that costs anything. When they are down or exhausted, the router falls through to flat-rate subscription models — opencode Zen GO, z.ai's GLM Coding Plan, Claude through an existing subscription — where the marginal request is still free. A per-token paid model is the last resort, not the default.
+Free tiers drain first. NIM and Mistral cost nothing, so they get tried before anything that costs anything. When they are down or exhausted, the router falls through to flat-rate subscription models — opencode Zen GO, z.ai's GLM Coding Plan, Claude through an existing Max subscription, GPT through an existing Codex/ChatGPT subscription — where the marginal request is still free. A per-token paid model is the last resort, not the default.
 
 None of this is learned. `priority_router.py` is a readable priority list. Here is one request through it, `model: "auto"`, prompt `"debug this stack trace ..."`:
 
@@ -17,7 +17,7 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
 3. **Availability mask.** `availability.yaml` is read on this request and merged with the per-request allow/deny lists. It is a per-provider on/off switch you edit by hand.
 4. **Health mask.** `load_health()` re-reads `model_health.yaml` from disk on **every** request — no cache, no process restart needed. Any alias marked `ok: false` is dropped from the candidate list; a missing or unparseable file fails open, so nothing is dropped. The file is written by `scripts/nim_health.sh`, which probes only the free aliases (NIM, Mistral free, zen-free) in parallel with a 16-token "reply OK" call, fallbacks off. A probe passes only if it returns 200, under `NIM_LATENCY_MAX_MS` (8000 by default), echoes back the alias it asked for, and reports `completion_tokens > 0` — a 200 alone would certify a dead alias that a substitute answered. `scripts/install_health_timer.sh` runs that audit every 15 minutes, plus within ~30s of a paid model answering. Flat-rate backends are never probed; probing spends their quota for nothing.
 5. **Content heuristics.** No tag, so `classify()` runs regexes in order: code markers (fences, tracebacks, `def`/`import`, "debug") → `code`; logic words → `reason`; agent words → `agent`; under ~300 tokens → `cheap`; otherwise `general`. This prompt hits `code`.
-6. **Cost chain pick.** `CODE_TIER` is sorted by `(cost class, stability, measured latency)`. Cost classes never leapfrog: free → z.ai flat → Zen GO flat → Claude Max flat → Zen per-token → Copilot. Within the free class, steady providers rank above load-variable NIM, and measured latency breaks the remaining ties. The first candidate passing the masks wins — say `mist-codestral`. `[FRONTIER]` and `[ORCH]` skip the latency sort and keep config order, because there the order is the intent. If the whole tier is masked out, the layer-5 chain walks every provider in cost order instead.
+6. **Cost chain pick.** `CODE_TIER` is sorted by `(cost class, stability, measured latency)`. Cost classes never leapfrog: free → Zen GO flat → z.ai flat → (Claude Max + Codex) flat → Zen per-token → Copilot. Claude Max and Codex share one class because both are sunk-cost subscriptions; inside a class, measured latency decides, so neither is always drained first. Within the free class, steady providers rank above load-variable NIM, and measured latency breaks the remaining ties. The first candidate passing the masks wins — say `mist-codestral`. `[FRONTIER]` and `[ORCH]` skip the latency sort and keep config order, because there the order is the intent. If the whole tier is masked out, the layer-5 chain walks every provider in cost order instead.
 7. **Thinking budget.** Each family takes a different parameter shape, so the router injects the right one: an Anthropic thinking block, `reasoning_effort`, or `chat_template_kwargs.enable_thinking`. Native reasoners get nothing injected.
 8. **The call goes out.** A failure mid-request is not the router's fallback — LiteLLM's own chain serves a substitute. The router sees it afterwards: if the alias that actually answered was `zen-paid-*`, it touches a trigger file, and the health refresher re-audits the free models so the next prompt can go back to free.
 9. **Logged.** LiteLLM writes the routed alias, the served model, tokens and spend to Postgres. The response is prefixed `[model · think:level · tier]` so the choice is visible while you work.
@@ -38,9 +38,10 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
         |  classify()           prompt -> cheap|code|reason|agent|general
         |  order_tier() / pick_model()  cost class -> stability -> latency
         v
-  provider: NIM | Mistral | Zen | z.ai GLM | Claude OAuth | Copilot
-        |                          ^                |
-        |     providers/claude_oauth_proxy.py ------+
+  provider: NIM | Mistral | Zen | z.ai GLM | Claude OAuth | Codex OAuth | Copilot
+        |                          ^                ^          |
+        |     providers/claude_oauth_proxy.py :4041 |          |
+        |     providers/codex_oauth_proxy.py  :4042 ----------+
         v
   async_post_call_success_hook -> Postgres LiteLLM_SpendLogs  (audit)
 
@@ -51,7 +52,7 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
 
 Two YAML files are state, not config-you-ship: `availability.yaml` is the per-provider switch you edit by hand, and `model_health.yaml` is written by `scripts/nim_health.sh` on a 15-minute timer installed by `scripts/install_health_timer.sh`. Both are read fresh on every request, so neither needs a restart.
 
-Providers are plain LiteLLM backends except Claude, which goes through `providers/claude_oauth_proxy.py` to reuse an existing subscription instead of an API key. Everything that answered is logged to the Postgres `LiteLLM_SpendLogs` table, which is what `scripts/show_routing.sh`, `scripts/usage.sh` and `scripts/export_audit.sh` read.
+Providers are plain LiteLLM backends except two that reuse an existing subscription instead of an API key: Claude through `providers/claude_oauth_proxy.py` (:4041, a pass-through that injects OAuth headers), and Codex/ChatGPT through `providers/codex_oauth_proxy.py` (:4042). The Codex shim does more work — that subscription serves GPT only via `chatgpt.com/backend-api/codex/responses`, which speaks the Responses API and refuses non-streaming requests, so the proxy translates chat/completions in both directions and re-assembles the SSE stream. It reads `~/.codex/auth.json` fresh per request so a token the Codex CLI refreshes is picked up without a restart. Everything that answered is logged to the Postgres `LiteLLM_SpendLogs` table, which is what `scripts/show_routing.sh`, `scripts/usage.sh` and `scripts/export_audit.sh` read.
 
 ## Watching it route
 
@@ -110,7 +111,7 @@ Do not use it for a single high-stakes call where you want one specific model, f
 
 ## Adding free providers
 
-The wired free and flat-rate backends are NVIDIA NIM ([build.nvidia.com](https://build.nvidia.com), free, no card), Mistral ([console.mistral.ai](https://console.mistral.ai), free tier), [opencode Zen](https://opencode.ai/zen) (free tier plus the GO subscription), [z.ai](https://z.ai) GLM Coding Plan, Claude via an existing Max subscription, and GitHub Copilot. Anything with an [OpenRouter](https://openrouter.ai/models?q=free)-style free tier drops in the same way — [Groq](https://console.groq.com), [Cerebras](https://cloud.cerebras.ai), [Gemini](https://aistudio.google.com), and the free-tier indexes are listed in the guide below.
+The wired free and flat-rate backends are NVIDIA NIM ([build.nvidia.com](https://build.nvidia.com), free, no card), Mistral ([console.mistral.ai](https://console.mistral.ai), free tier), [opencode Zen](https://opencode.ai/zen) (free tier plus the GO subscription), [z.ai](https://z.ai) GLM Coding Plan, Claude via an existing Max subscription, GPT via an existing Codex/ChatGPT subscription, and GitHub Copilot. Anything with an [OpenRouter](https://openrouter.ai/models?q=free)-style free tier drops in the same way — [Groq](https://console.groq.com), [Cerebras](https://cloud.cerebras.ai), [Gemini](https://aistudio.google.com), and the free-tier indexes are listed in the guide below.
 
 Three edits for a plain API-key provider. Add the model block to `config.yaml`:
 

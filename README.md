@@ -2,6 +2,8 @@
 
 One OpenAI-compatible endpoint, many free and cheap models behind it, cost discipline in the routing.
 
+**2026-07-30** — added Codex/ChatGPT OAuth backend (`cod-luna` / `cod-mini` / `cod-terra` / `cod-sol`, flat-rate, ranked by published quota weight); refreshed the NIM roster after NVIDIA delisted the Qwen family (`nim-inkling`, `nim-gptoss` in, `nim-qwen*` / `nim-mistral` out) and the Zen free tier (`zen-free-ling`, `zen-free-laguna` in, dead `zen-free-hy3` out); flat band reordered to Zen GO before z.ai.
+
 ## What it does
 
 It exposes a single OpenAI-compatible endpoint at `http://localhost:4040/v1`. The port is configurable in `docker-compose.yml` or with `--port`. Behind it sit a dozen-plus models across NVIDIA NIM, Mistral, opencode Zen, z.ai GLM, Claude via OAuth, Codex/ChatGPT via OAuth, and GitHub Copilot; clients ask for model `auto` and the router picks a real model per request.

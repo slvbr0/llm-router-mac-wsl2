@@ -79,8 +79,13 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # NOTE: GPT-family Copilot models (cop-gpt/cop-codex/cop-mini) fail via litellm's
 # Copilot path (GPT needs the /responses API). Use Claude/Gemini Copilot + Zen's
 # GPT (zen-gpt) for GPT needs instead. GPT-via-Copilot kept in config but unused.
-CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cod-mini", "cod-luna", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cod-luna", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+# Flat/subscription members are ordered by QUOTA WEIGHT, not latency: they are never
+# latency-probed (probing burns the very quota they are held in reserve for), so config order
+# is what decides inside a cost class. Codex quota per OpenAI's published table — credits/1M
+# in-out and messages per 5h window: luna 5/30 (250-2000 msgs) << mini 18.75/113 (60-350)
+# << 5.5 (15-80) << sol 125/750 (10-100). So luna leads: cheapest on quota AND newer-gen.
+CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
+GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cod-luna", "cod-mini", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
 CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cod-terra", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only

@@ -71,7 +71,7 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
     # Claude Max subscription via OAuth (flat-rate, rate-limited by Anthropic)
     "anthropic": ["ant-fable", "ant-opus", "ant-sonnet", "ant-haiku"],
     # Codex/ChatGPT subscription (flat) via providers/codex_oauth_proxy.py on :4042.
-    "codex": ["cod-sol", "cod-terra", "cod-luna"],
+    "codex": ["cod-sol", "cod-terra", "cod-luna", "cod-mini"],
 }
 
 # Tiers: NIM first (health-gated) -> Zen (free before paid) -> ant-* -> Copilot tail.
@@ -79,7 +79,7 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # NOTE: GPT-family Copilot models (cop-gpt/cop-codex/cop-mini) fail via litellm's
 # Copilot path (GPT needs the /responses API). Use Claude/Gemini Copilot + Zen's
 # GPT (zen-gpt) for GPT needs instead. GPT-via-Copilot kept in config but unused.
-CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
+CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cod-mini", "cod-luna", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
 GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cod-luna", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
 CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cod-terra", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —

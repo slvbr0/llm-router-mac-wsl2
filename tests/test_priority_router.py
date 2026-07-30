@@ -659,10 +659,11 @@ def test_nim_step_is_free_native_reasoner_no_param():
 
 
 def test_go_flat_beats_zai_when_free_reasoners_health_gated():
-    # Cost cascade at the routing level: knock the free zen reasoners out via health, and the
-    # reason tier serves GO zen-glm (class 1) before z.ai (class 2). NIM/Mistral gated off.
-    health = {m: {"ok": False} for m in ("zen-free-ling", "zen-free-mimo", "zen-free-north",
-                                          "zen-free-nemotron")}
+    # Cost cascade at the routing level: with EVERY free model gated off, the reason tier serves
+    # GO zen-glm (class 1) before z.ai (class 2). NIM/Mistral are also masked by availability.
+    # All of FREE_POOL must go down, not just the reason-tier ones: since free_fallback() the
+    # tier borrows any other healthy free model first — which is the point of that feature.
+    health = {m: {"ok": False} for m in pr.FREE_POOL}
     r = route("[REASON] prove the halting problem",
               avail={"mistral": False, "nim": False, "zai": True, "zen": True,
                      "anthropic": True, "copilot": True},
@@ -697,3 +698,44 @@ def test_codex_non_reasoners_get_no_thinking_param():
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[REASON] x"}]})
         assert "thinking" not in r
         assert "reasoning_effort" not in r.get("extra_body", {})
+
+
+# --- free-capacity borrowing across tiers ------------------------------------------------------
+# Free capacity is lumpy (NIM flaps, Mistral keys lapse, zen-free rate-limits). A tier whose own
+# free models are all down must borrow another tier's free model before spending a subscription.
+
+def test_tier_native_free_still_wins_when_healthy():
+    # Borrowing must not disturb the normal case: the tier's own free pick still leads.
+    assert route("hi") == "zen-free-deepseek"
+
+
+def test_cheap_borrows_a_free_model_before_any_subscription():
+    down = {m: {"ok": False} for m in pr.CHEAP_TIER if pr._cost_class(m) == 0}
+    got = route("hi", health=down)
+    assert pr._cost_class(got) == 0, f"{got} is not free — a subscription was spent too early"
+    assert got not in pr.CHEAP_TIER          # genuinely borrowed from another tier
+
+
+def test_subscription_only_once_every_free_model_is_down():
+    down = {m: {"ok": False} for m in pr.FREE_POOL}
+    got = route("hi", health=down)
+    assert pr._cost_class(got) > 0
+
+
+def test_frontier_and_orchestrator_never_borrow_free_models():
+    # Explicit quality-intent tiers: a tiny free model must not answer a frontier prompt just
+    # because it is free. They fall through to the layer-5 cost chain instead.
+    for t in ("frontier", "orchestrator"):
+        got = pr.route("hard", {"tier": t}, ALL_OK, {})
+        assert got in pr.TIER_MAP[t], f"{t} leaked a borrowed model: {got}"
+
+
+def test_borrowing_never_breaks_the_cost_cascade():
+    extended = pr.free_fallback(pr.CHEAP_TIER)
+    classes = [pr._cost_class(m) for m in pr.order_tier(extended, {}, native=set(pr.CHEAP_TIER))]
+    assert classes == sorted(classes), "cost classes must never leapfrog"
+
+
+def test_free_pool_contains_only_free_models():
+    for m in pr.FREE_POOL:
+        assert pr._cost_class(m) == 0, f"{m} is in FREE_POOL but is not cost class 0"

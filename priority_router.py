@@ -18,7 +18,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -238,6 +238,23 @@ TIER_MAP = {
     "orchestrator": ORCHESTRATOR_TIER,
 }
 
+# Every zero-marginal-cost alias, steadiest host first (zen-free -> Mistral -> load-variable NIM).
+# free_fallback() appends these to a tier so that when a tier's own free models are all down, a
+# borrowed free model answers instead of a flat subscription. RESTRICTED_AUTO is irrelevant here
+# (the brains are not free), but _model_ok still gates everything at pick time.
+FREE_POOL = [
+    "zen-free-nemotron", "zen-free-ling", "zen-free-north", "zen-free-mimo",
+    "zen-free-deepseek", "zen-free-pickle", "zen-free-laguna",
+    "mist-large", "mist-medium", "mist-codestral", "mist-magistral",
+    "nim-glm", "nim-inkling", "nim-step", "nim-gptoss", "nim-deepseek",
+    "nim-nemotron", "nim-minimax", "nim-deepseek-flash", "nim-llama", "nim-nemotron-super",
+]
+
+# Tiers that borrow free capacity. frontier/orchestrator are EXCLUDED on purpose: those are
+# explicit quality-intent lists, and a small free model must not answer a frontier prompt just
+# because it costs nothing. If they run dry, the layer-5 cost chain still covers it.
+FREE_FALLBACK_TIERS = ("cheap", "general", "code", "reason", "agent")
+
 AUTO_MODELS = ("", "auto", "default")
 
 CODE_MARKERS = re.compile(
@@ -390,22 +407,44 @@ def _stability_rank(model: str) -> int:
     return 0            # non-free providers: no intra-class stability preference
 
 
-def order_tier(tier: List[str], health: Dict[str, Any]) -> List[str]:
-    """Stable sort by (cost_class, stability_rank, measured latency). Unprobed aliases keep their
-    config position within the (class, stability) bucket (fail-open: no data -> no reordering)."""
+def order_tier(tier: List[str], health: Dict[str, Any],
+               native: Optional[Set[str]] = None) -> List[str]:
+    """Stable sort by (cost_class, native_rank, stability_rank, measured latency). Unprobed
+    aliases keep their config position within the bucket (fail-open: no data -> no reordering).
+
+    `native` marks the tier's OWN members. Anything outside it is a borrowed free model appended
+    by free_fallback() — it ranks after the tier's own picks but, because cost_class dominates,
+    still ahead of every flat/subscription model. That is the whole point: a reason-tier free
+    model should answer a cheap prompt before we spend a subscription on it."""
     def key(item):
         idx, model = item
         h = health.get(model) or {}
         lat = h.get("latency_ms")
-        return (_cost_class(model), _stability_rank(model),
+        return (_cost_class(model),
+                0 if (native is None or model in native) else 1,
+                _stability_rank(model),
                 lat if lat is not None else 10**9, idx)
     return [m for _, m in sorted(enumerate(tier), key=lambda im: key(im))]
 
 
+def free_fallback(tier: List[str]) -> List[str]:
+    """tier + every other FREE alias not already in it.
+
+    Free capacity is lumpy: NIM flaps, Mistral's key can lapse, zen-free rate-limits. Without
+    this, a cheap prompt whose four designated free models are all down falls straight to a
+    flat subscription while other free models sit idle and healthy. Ordered zen-free -> Mistral
+    -> NIM so the steadier hosts lead (order_tier's stability rank agrees, this just makes the
+    tiebreak deterministic)."""
+    seen = set(tier)
+    extra = [m for m in FREE_POOL if m not in seen]
+    return tier + extra
+
+
 def pick_model(tier: List[str], availability: Dict[str, bool],
-               health: Dict[str, Any], latency_sort: bool = True) -> Optional[str]:
+               health: Dict[str, Any], latency_sort: bool = True,
+               native: Optional[Set[str]] = None) -> Optional[str]:
     # latency_sort=False for explicit-intent tiers (FRONTIER lists copilot first ON PURPOSE)
-    candidates = order_tier(tier, health) if latency_sort else tier
+    candidates = order_tier(tier, health, native) if latency_sort else tier
     for model in candidates:
         if _model_ok(model, availability, health):
             return model
@@ -429,11 +468,17 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     health = health or {}
     tier = directives.get("tier") or classify(prompt)
     tier_models = TIER_MAP.get(tier, GENERAL_TIER)
+    native = set(tier_models)
+    if tier in FREE_FALLBACK_TIERS:
+        # Borrow every other free alias as a tail. cost_class still dominates the sort, so these
+        # rank behind the tier's own free models but ahead of any flat/paid one.
+        tier_models = free_fallback(tier_models)
     # (The brains grok/kimi-k3 are no longer boost-escalated here: they are RESTRICTED_AUTO —
     # explicit-only — so [BOOST] on the orchestrator tier just raises thinking depth on the
     # high-quota capables, never spends a low-quota brain that could overflow GO -> paid Zen.)
     chosen = pick_model(tier_models, availability, health,
-                        latency_sort=tier not in ("frontier", "orchestrator"))   # explicit-intent tiers keep config (quality) order
+                        latency_sort=tier not in ("frontier", "orchestrator"),   # explicit-intent tiers keep config (quality) order
+                        native=native)
     if chosen:
         verbose_logger.info("PriorityRouter: tier=%s -> %s", tier, chosen)
         return chosen

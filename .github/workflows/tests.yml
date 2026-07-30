@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # No requirements file: the suite stubs litellm (tests/conftest.py) and the
+      # router only needs pyyaml. Keep it that way — the point is a fast guard,
+      # not a full runtime install.
+      - run: pip install pytest pyyaml
+      - run: python -m pytest -q

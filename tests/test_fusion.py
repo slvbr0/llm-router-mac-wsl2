@@ -21,9 +21,9 @@ def test_deep_panel_is_largest():
 
 
 def test_panel_skips_unhealthy_nim():
-    health = {"nim-mistral": {"ok": False}}
+    health = {"nim-inkling": {"ok": False}}
     p = fu.build_panel("easy", CFG, ALL_OK, health)
-    assert "nim-mistral" not in p["proposers"]
+    assert "nim-inkling" not in p["proposers"]
 
 
 def test_free_first_when_nim_healthy():
@@ -34,7 +34,7 @@ def test_free_first_when_nim_healthy():
 
 def test_paid_backfills_when_free_degraded():
     # hard with most free NIM down -> paid backfills to keep the panel width
-    health = {"nim-mistral": {"ok": False}, "nim-kimi": {"ok": False}, "nim-qwen-max": {"ok": False}}
+    health = {"nim-inkling": {"ok": False}, "nim-step": {"ok": False}, "nim-nemotron": {"ok": False}}
     p = fu.build_panel("hard", CFG, ALL_OK, health)
     assert any(fu.provider_of(a) == "copilot" for a in p["proposers"])   # paid pulled in
     assert len(p["proposers"]) >= 2
@@ -46,9 +46,9 @@ def test_panel_skips_masked_provider():
 
 
 def test_aggregator_first_healthy():
-    # deep aggregator is [zen-glm, cop-opus, nim-qwen-max, nim-mistral]; zen masked ->
-    # skip unhealthy nim-qwen-max too -> cop-opus
-    health = {"nim-qwen-max": {"ok": False}}
+    # deep aggregator is [zen-glm, cop-opus, nim-nemotron, nim-inkling]; zen masked ->
+    # skip unhealthy nim-nemotron too -> cop-opus
+    health = {"nim-nemotron": {"ok": False}}
     p = fu.build_panel("deep", CFG, {"nim": True, "zen": False, "copilot": True}, health)
     assert p["aggregator"] == "cop-opus"
 
@@ -84,9 +84,9 @@ def test_fuse_happy_path_aggregates(monkeypatch):
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
     monkeypatch.setattr(fu, "call_model", _stub_call({
-        "nim-mistral": "draft A", "zen-free-deepseek": "draft B", "nim-llama": "draft C"}))
+        "nim-inkling": "draft A", "zen-free-deepseek": "draft B", "nim-llama": "draft C"}))
     out = fu.fuse("[NOVEL] short task", conduct=False)
-    assert out["answer"] == "draft A"           # aggregator nim-mistral stubbed -> its content
+    assert out["answer"] == "draft A"           # aggregator nim-inkling stubbed -> its content
     assert out["receipt"]["degraded"] is False
     assert len(out["receipt"]["proposers"]) >= 2   # early-trigger returns at quorum, not always all
     assert out["receipt"]["est_cost"]["usd_estimate"] == 0.0
@@ -97,7 +97,7 @@ def test_fuse_degrades_when_proposers_fail(monkeypatch):
     monkeypatch.setattr(fu, "load_health", lambda: {})
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
-    monkeypatch.setattr(fu, "call_model", _stub_call({"nim-mistral": "solo answer"}))
+    monkeypatch.setattr(fu, "call_model", _stub_call({"nim-inkling": "solo answer"}))
     out = fu.fuse("[NOVEL] short task", escalate=False, conduct=False)   # single round, no auto-escalation
     assert out["receipt"]["degraded"] is True
     assert out["answer"] == "solo answer"
@@ -110,7 +110,7 @@ def test_auto_escalates_when_degraded(monkeypatch):
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
     monkeypatch.setattr(fu, "call_model", _stub_call({
-        "nim-mistral": "m", "cop-haiku": "h", "nim-qwen-max": "q",
+        "nim-inkling": "m", "cop-haiku": "h", "nim-nemotron": "q",
         "zen-glm": "z", "zen-kimi": "k"}))   # easy: 1 ok; hard: enough ok + agg (GO models in pool)
     out = fu.fuse("[NOVEL] short task", conduct=False)
     assert out["receipt"]["escalation_path"] == ["easy", "hard"]
@@ -122,7 +122,7 @@ def test_pinned_depth_skips_escalation(monkeypatch):
     monkeypatch.setattr(fu, "load_health", lambda: {})
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
-    monkeypatch.setattr(fu, "call_model", _stub_call({"nim-mistral": "m"}))  # everything degrades
+    monkeypatch.setattr(fu, "call_model", _stub_call({"nim-inkling": "m"}))  # everything degrades
     out = fu.fuse("[NOVEL DEEP] task", conduct=False)                   # pinned -> no escalation attempts
     assert out["receipt"]["escalation_path"] == ["deep"]
 

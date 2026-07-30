@@ -10,18 +10,21 @@ model_list:
     litellm_params: {model: openai/deepseek-ai/deepseek-v4-pro, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   - model_name: nim-deepseek-flash
     litellm_params: {model: openai/deepseek-ai/deepseek-v4-flash, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
-  - model_name: nim-qwen-max
-    litellm_params: {model: openai/qwen/qwen3.5-397b-a17b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
-  - model_name: nim-qwen
-    litellm_params: {model: openai/qwen/qwen3.5-122b-a10b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
+  # nim-qwen-max / nim-qwen removed 2026-07-29: NVIDIA delisted the ENTIRE Qwen family (HTTP 410;
+  # zero qwen/* entries remain in /v1/models). nim-inkling + nim-gptoss replace that capacity.
+  - model_name: nim-inkling
+    litellm_params: {model: openai/thinkingmachines/inkling, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}  # ~0.9s, tool-capable (verified)
+  - model_name: nim-gptoss
+    litellm_params: {model: openai/openai/gpt-oss-20b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}  # ~2.4s, tool-capable (verified)
   - model_name: nim-minimax
     litellm_params: {model: openai/minimaxai/minimax-m3, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   - model_name: nim-nemotron
     litellm_params: {model: openai/nvidia/nemotron-3-ultra-550b-a55b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   - model_name: nim-nemotron-super
     litellm_params: {model: openai/nvidia/nemotron-3-super-120b-a12b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
-  - model_name: nim-mistral
-    litellm_params: {model: openai/mistralai/mistral-large-3-675b-instruct-2512, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
+  # nim-mistral removed 2026-07-29: mistral-large-3 delisted (HTTP 410). The remaining NIM mistral
+  # builds are either not provisioned for this account (404) or >90s (mistral-medium-3.5-128b).
+  # Mistral proper is still available via the mist-* aliases on api.mistral.ai.
   - model_name: nim-llama
     litellm_params: {model: openai/meta/llama-3.3-70b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   - model_name: nim-step
@@ -174,7 +177,7 @@ router_settings:
   # -> Anthropic Max flat -> PAID zen twin (last resort) -> copilot. Free ALWAYS before paid.
   fallbacks:
     # Mistral free -> peer Mistral -> free NIM -> z.ai flat -> GO -> copilot (cost-ordered).
-    - mist-large: [mist-medium, mist-codestral, nim-mistral, zai-turbo, zen-glm, cop-sonnet]
+    - mist-large: [mist-medium, mist-codestral, nim-inkling, zai-turbo, zen-glm, cop-sonnet]
     - mist-codestral: [mist-large, nim-deepseek, zai-turbo, zen-kimi, cop-sonnet]
     - mist-medium: [mist-magistral, mist-large, nim-glm, zai-52, zen-glm, ant-sonnet]
     - mist-magistral: [mist-medium, nim-glm, zai-52, zen-glm, ant-sonnet]
@@ -183,18 +186,17 @@ router_settings:
     - zai-flash: [zai-turbo, mist-codestral, zen-glm, cop-sonnet]
     - zai-52: [zai-51, mist-medium, zen-glm, zen-qwen-max, ant-sonnet, cop-opus]
     - zai-51: [zai-52, mist-medium, zen-glm, zen-qwen-max, ant-sonnet, cop-opus]
-    - nim-glm: [nim-mistral, zen-free-nemotron, zen-glm, cop-sonnet]
-    - nim-mistral: [nim-glm, zen-free-nemotron, zen-glm, cop-sonnet]
-    - nim-deepseek: [nim-qwen, nim-deepseek-flash, zen-deepseek, cop-sonnet]
-    - nim-qwen: [nim-deepseek, nim-minimax, zen-kimi, cop-sonnet]
-    - nim-qwen-max: [nim-nemotron, nim-deepseek, zen-qwen-max, cop-opus]
-    - nim-nemotron: [nim-qwen-max, nim-nemotron-super, zen-qwen-max, cop-opus]
-    - nim-nemotron-super: [nim-nemotron, nim-qwen-max, zen-qwen-max, cop-opus]
+    - nim-glm: [nim-inkling, zen-free-nemotron, zen-glm, cop-sonnet]
+    - nim-inkling: [nim-gptoss, nim-glm, zen-free-nemotron, zen-glm, cop-sonnet]
+    - nim-gptoss: [nim-inkling, nim-glm, zen-free-nemotron, zen-glm, cop-sonnet]
+    - nim-deepseek: [nim-gptoss, nim-deepseek-flash, zen-deepseek, cop-sonnet]
+    - nim-nemotron: [nim-nemotron-super, nim-inkling, zen-qwen-max, cop-opus]
+    - nim-nemotron-super: [nim-nemotron, nim-inkling, zen-qwen-max, cop-opus]
     - nim-minimax: [nim-glm, nim-deepseek, zen-minimax, cop-sonnet]
     - nim-llama: [nim-deepseek-flash, zen-free-deepseek, zen-deepseek-flash, cop-haiku]
     - nim-step: [nim-glm, nim-deepseek, zen-free-north, zen-glm, cop-sonnet]
     - nim-deepseek-flash: [nim-llama, zen-free-deepseek, zen-deepseek-flash, cop-haiku]
-    - zen-free-nemotron: [nim-glm, nim-mistral, zen-glm, cop-sonnet]
+    - zen-free-nemotron: [nim-glm, nim-inkling, zen-glm, cop-sonnet]
     - zen-free-deepseek: [nim-deepseek-flash, nim-llama, zen-deepseek-flash, cop-haiku]
     - zen-free-pickle: [zen-free-deepseek, nim-llama, cop-haiku]
     # GO flat models overflow FREE-FIRST. A GO 429 means the whole GO plan is saturated, so other
@@ -206,9 +208,9 @@ router_settings:
     - zen-deepseek-flash: [zen-free-deepseek, nim-deepseek-flash, nim-llama, zai-flash, cop-haiku]
     - zen-kimi: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, cop-sonnet]
     - zen-minimax: [nim-minimax, nim-glm, zai-turbo, ant-sonnet, zen-paid-minimax, cop-sonnet]
-    - zen-qwen-max: [nim-qwen-max, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-max, cop-opus]
+    - zen-qwen-max: [nim-nemotron, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-max, cop-opus]
     - zen-mimo: [nim-glm, mist-large, zai-turbo, ant-sonnet, cop-sonnet]
-    - zen-qwen-plus: [nim-qwen-max, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-plus, cop-opus]
+    - zen-qwen-plus: [nim-inkling, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-plus, cop-opus]
     # Orchestrator brains (low quota): a 429 degrades FREE-FIRST (free reasoner) -> Anthropic Max
     # (quality flat) -> z.ai flat -> PAID twin LAST RESORT -> copilot. Previously paid was 1st/2nd
     # here — that is exactly what billed the 63k brain calls. grok/kimi-k3 skip each other (both
@@ -237,11 +239,11 @@ router_settings:
     - cop-opus: [ant-opus, ant-fable, cop-sonnet, cop-gemini, zen-qwen-max, zen-glm]
     - ant-fable: [ant-opus, ant-sonnet, cop-opus, zen-fable, zen-gpt, zen-qwen-max]
     - ant-sonnet: [ant-opus, cop-sonnet, zen-fable, zen-gpt, zen-qwen-max]
-    - ant-haiku: [ant-sonnet, cop-haiku, zen-glm, nim-mistral, zen-free-nemotron]
+    - ant-haiku: [ant-sonnet, cop-haiku, zen-glm, nim-inkling, zen-free-nemotron]
     - ant-opus: [ant-fable, ant-sonnet, cop-opus, zen-fable, zen-opus, zen-gpt, zen-qwen-max]
     - cop-sonnet: [ant-sonnet, cop-opus, cop-gemini, zen-glm]
     - cop-gemini: [ant-sonnet, cop-sonnet, zen-glm, nim-glm]
-    - cop-haiku: [ant-haiku, zen-glm, nim-mistral, zen-free-nemotron]
+    - cop-haiku: [ant-haiku, zen-glm, nim-inkling, zen-free-nemotron]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

@@ -139,8 +139,8 @@ def test_order_tier_go_never_before_free():
 
 
 def test_order_tier_unprobed_keeps_config_order():
-    out = pr.order_tier(["nim-deepseek", "nim-qwen", "cop-sonnet"], {})
-    assert out == ["nim-deepseek", "nim-qwen", "cop-sonnet"]
+    out = pr.order_tier(["nim-deepseek", "nim-gptoss", "cop-sonnet"], {})
+    assert out == ["nim-deepseek", "nim-gptoss", "cop-sonnet"]
 
 
 def test_pick_model_uses_latency_order():

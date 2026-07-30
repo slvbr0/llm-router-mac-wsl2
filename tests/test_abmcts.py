@@ -41,7 +41,7 @@ def test_select_descends_into_strong_child():
 def test_select_gen_fires_when_children_weak():
     random.seed(3)
     root = ab.Node(0, parent=None, answer=None, alias=None)
-    weak = ab.Node(1, parent=root, answer="w", alias="nim-qwen")
+    weak = ab.Node(1, parent=root, answer="w", alias="nim-gptoss")
     root.children.append(weak)
     for _ in range(8):
         ab.backprop(weak, 0.05)                       # stalled child

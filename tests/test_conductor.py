@@ -46,22 +46,22 @@ def _stub(results):
 
 def test_conductor_pass_parses_score(monkeypatch):
     monkeypatch.setattr(cd, "call_model", lambda *a, **k: {
-        "alias": "nim-qwen-max", "provider": "nim", "ok": True, "tokens": 20, "latency_ms": 1,
+        "alias": "nim-nemotron", "provider": "nim", "ok": True, "tokens": 20, "latency_ms": 1,
         "content": "SCORE: 9\nGAPS: none\nANSWER:\nsynth"})
     cfg = cd.load_config()
     out = cd.conductor_pass("task", [{"alias": "nim-glm", "content": "d1"}],
-                            "nim-qwen-max", "k", cfg, {"nim": True}, {})
+                            "nim-nemotron", "k", cfg, {"nim": True}, {})
     assert out["score"] == 9 and out["answer"] == "synth"
 
 
 def test_committee_returns_only_good(monkeypatch):
     monkeypatch.setattr(cd, "build_panel", lambda *a, **k: {
-        "proposers": ["nim-mistral", "zen-free-deepseek", "nim-llama"], "aggregator": "nim-mistral"})
+        "proposers": ["nim-inkling", "zen-free-deepseek", "nim-llama"], "aggregator": "nim-inkling"})
     # _committee delegates to fan_out (in fusion.fusion) -> patch fu.call_model
-    monkeypatch.setattr(fu, "call_model", _stub({"nim-mistral": "A", "zen-free-deepseek": "B"}))
+    monkeypatch.setattr(fu, "call_model", _stub({"nim-inkling": "A", "zen-free-deepseek": "B"}))
     cfg = cd.load_config()
     good = cd._committee("t", "easy", cfg, "k", {"nim": True, "zen": True, "copilot": True}, {})
-    assert len(good) >= 2 and {"nim-mistral", "zen-free-deepseek"} <= {g["alias"] for g in good}
+    assert len(good) >= 2 and {"nim-inkling", "zen-free-deepseek"} <= {g["alias"] for g in good}
 
 
 def _seq_conductor(scores):
@@ -75,7 +75,7 @@ def _seq_conductor(scores):
 
 
 def _noop_committee(*a, **k):
-    return [{"alias": "nim-mistral", "provider": "nim", "ok": True, "content": "d", "tokens": 5}]
+    return [{"alias": "nim-inkling", "provider": "nim", "ok": True, "content": "d", "tokens": 5}]
 
 
 def test_conduct_stops_at_threshold(monkeypatch):
@@ -105,11 +105,11 @@ def test_conduct_returns_best_not_last(monkeypatch):
 def test_conductor_pass_falls_back_to_best_draft_when_answer_empty(monkeypatch):
     # conductor emits SCORE but no ANSWER body -> fall back to longest draft, never empty
     monkeypatch.setattr(cd, "call_model", lambda *a, **k: {
-        "alias": "nim-qwen-max", "provider": "nim", "ok": True, "tokens": 20, "latency_ms": 1,
+        "alias": "nim-nemotron", "provider": "nim", "ok": True, "tokens": 20, "latency_ms": 1,
         "content": "SCORE: 7\nGAPS: none\nANSWER:"})     # empty answer body
     cfg = cd.load_config()
     drafts = [{"alias": "nim-glm", "content": "short"},
-              {"alias": "nim-mistral", "content": "a much longer and better draft answer"}]
-    out = cd.conductor_pass("task", drafts, "nim-qwen-max", "k", cfg, {"nim": True}, {})
+              {"alias": "nim-inkling", "content": "a much longer and better draft answer"}]
+    out = cd.conductor_pass("task", drafts, "nim-nemotron", "k", cfg, {"nim": True}, {})
     assert out["score"] == 7
     assert out["answer"] == "a much longer and better draft answer"

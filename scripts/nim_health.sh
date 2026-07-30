@@ -26,7 +26,7 @@ OUT="model_health.yaml"
 #   - opencode GO (zen-*) + brains: flat/quota-metered — not probed (would drain quota).
 #   - Anthropic OAuth (ant-*) / Copilot: not probed; if the OAuth/credits work, the models work.
 # Unprobed models fail-open (assumed healthy, keep config order) in priority_router.py.
-NIM_ALIASES="nim-glm nim-deepseek nim-deepseek-flash nim-qwen-max nim-qwen nim-minimax nim-nemotron nim-nemotron-super nim-mistral nim-step nim-llama"
+NIM_ALIASES="nim-glm nim-deepseek nim-deepseek-flash nim-inkling nim-gptoss nim-minimax nim-nemotron nim-nemotron-super nim-step nim-llama"
 MIST_ALIASES="mist-large mist-codestral mist-medium mist-magistral"     # Mistral free tier
 ZEN_FREE_ALIASES="zen-free-deepseek zen-free-nemotron zen-free-pickle zen-free-ling zen-free-laguna zen-free-mimo zen-free-north"
 ALL_ALIASES="$NIM_ALIASES $MIST_ALIASES $ZEN_FREE_ALIASES"

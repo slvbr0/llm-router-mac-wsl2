@@ -12,25 +12,25 @@ panels:
   # by latency; fusion tolerates "decent" (not just "fast") responders. Interactive Phase-1
   # routing stays fast; fusion does not.
   easy:                                        # short/simple — free-only (cheapest); paid only backfills
-    free: [nim-mistral, zen-free-deepseek, zen-deepseek-flash, nim-llama, nim-kimi]
+    free: [nim-inkling, zen-free-deepseek, zen-deepseek-flash, nim-llama, nim-gptoss]
     paid: [cop-haiku]
     size: 3
     paid_anchor: 0
-    aggregator: [nim-mistral, nim-llama, cop-haiku]
+    aggregator: [nim-inkling, nim-llama, cop-haiku]
     timeout_s: 60
   hard:                                        # default code/reason/agent — mostly free + 1 paid anchor
-    free: [nim-qwen-max, zen-glm, zen-kimi, nim-deepseek, nim-mistral, zen-free-deepseek, nim-kimi]
+    free: [nim-inkling, zen-glm, zen-kimi, nim-deepseek, nim-gptoss, zen-free-deepseek, nim-step]
     paid: [cop-haiku, cop-sonnet]
     size: 4
     paid_anchor: 1
-    aggregator: [zen-glm, nim-qwen-max, nim-mistral, cop-sonnet]
+    aggregator: [zen-glm, nim-nemotron, nim-inkling, cop-sonnet]
     timeout_s: 120                             # capable reasoning models allowed to take their time
   deep:                                        # [NOVEL DEEP] — heavyweight, 2 paid anchors, max quality
-    free: [zen-glm, zen-qwen-max, zen-deepseek, nim-qwen-max, nim-deepseek, nim-nemotron, nim-mistral]
+    free: [zen-glm, zen-qwen-max, zen-deepseek, nim-nemotron-super, nim-deepseek, nim-nemotron, nim-inkling]
     paid: [cop-opus, cop-sonnet]        # zen-gpt dropped: credits lane 401s on every call
     size: 5
     paid_anchor: 2
-    aggregator: [zen-glm, cop-opus, nim-qwen-max, nim-mistral]
+    aggregator: [zen-glm, cop-opus, nim-nemotron, nim-inkling]
     timeout_s: 300                             # frontier reasoning (cop-opus ~205s) — let it finish
 research:
   council_models: "gpt54,claude_sonnet,gemini_pro"        # pwm council -m
@@ -74,9 +74,9 @@ conductor:
   # candidate by measured latency; else a capable opencode-go (Zen) model like GLM 5.2; else
   # Copilot. Lists below are the *capable candidate pool* per difficulty (NIM first, then paid).
   models:
-    easy: [nim-mistral, nim-glm, nim-kimi, zen-deepseek-flash, zen-glm]
-    hard: [nim-glm, nim-qwen-max, nim-deepseek, nim-mistral, zen-glm, zen-qwen-max, cop-sonnet]
-    deep: [nim-qwen-max, nim-glm, nim-deepseek, nim-nemotron, zen-glm, zen-qwen-max, cop-opus]
+    easy: [nim-inkling, nim-glm, nim-gptoss, zen-deepseek-flash, zen-glm]
+    hard: [nim-glm, nim-nemotron, nim-deepseek, nim-inkling, zen-glm, zen-qwen-max, cop-sonnet]
+    deep: [nim-nemotron-super, nim-glm, nim-deepseek, nim-nemotron, zen-glm, zen-qwen-max, cop-opus]
   score_threshold: 8           # stop once best score >= this
   max_rounds: 3                # candidate evaluations beyond round 0 (cost cap)
   improve_epsilon: 1           # score gain that counts as "improved" -> keep deepening
@@ -84,7 +84,7 @@ conductor:
   timeout_s: 300               # conductor is a capable (slow) model — cop-opus ~205s; let it finish
 abmcts:                             # v2.1.1 [NOVEL TREE] — Multi-LLM AB-MCTS
   budget: {easy: 6, hard: 12, deep: 20}   # node generations per call
-  judge: [zen-glm, cop-haiku, nim-kimi]   # pairwise FALLBACK CHAIN; zen-glm first (GO flat-rate, reliable)
+  judge: [zen-glm, cop-haiku, nim-inkling] # pairwise FALLBACK CHAIN; zen-glm first (GO flat-rate, reliable)
   judge_timeout_s: 120
   judge_max_tokens: 300
   gen_max_tokens: 4000
@@ -103,5 +103,5 @@ abmcts:                             # v2.1.1 [NOVEL TREE] — Multi-LLM AB-MCTS
     # `frontier` prior makes the bandit's optimistic prior pull it FIRST, burning generation
     # steps on an arm that cannot answer. Re-add once a probe with fallbacks off serves itself.
     frontier: [ant-opus, ant-sonnet, cop-opus, cop-sonnet, cop-gemini]
-    strong:   [zen-glm, zen-qwen-max, zen-kimi, zen-deepseek, zen-minimax, nim-qwen-max, nim-glm, nim-deepseek, nim-kimi]
-    base:     [nim-mistral, nim-minimax, nim-nemotron, zen-free-deepseek, zen-deepseek-flash, zen-mimo, nim-qwen, nim-llama]
+    strong:   [zen-glm, zen-qwen-max, zen-kimi, zen-deepseek, zen-minimax, nim-nemotron, nim-glm, nim-deepseek, nim-nemotron-super]
+    base:     [nim-inkling, nim-minimax, nim-nemotron, zen-free-deepseek, zen-deepseek-flash, zen-mimo, nim-gptoss, nim-llama]

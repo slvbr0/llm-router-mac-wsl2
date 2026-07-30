@@ -41,8 +41,8 @@ except ModuleNotFoundError:  # pragma: no cover - host fallback (fusion CLI/MCP,
 # Provider priority (cost order). Dict order IS the layer-5 fallback order.
 PRIORITY_CHAIN: Dict[str, List[str]] = {
     "nim": [
-        "nim-glm", "nim-deepseek", "nim-qwen-max", "nim-qwen",
-        "nim-minimax", "nim-nemotron", "nim-nemotron-super", "nim-mistral",
+        "nim-glm", "nim-deepseek", "nim-inkling", "nim-gptoss",
+        "nim-minimax", "nim-nemotron", "nim-nemotron-super",
         "nim-step", "nim-deepseek-flash", "nim-llama",
     ],
     # Mistral free tier (api.mistral.ai, LiteLLM native mistral/). Capable models only:
@@ -78,12 +78,12 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # Copilot path (GPT needs the /responses API). Use Claude/Gemini Copilot + Zen's
 # GPT (zen-gpt) for GPT needs instead. GPT-via-Copilot kept in config but unused.
 CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zai-flash", "ant-haiku", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["nim-glm", "nim-mistral", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
-CODE_TIER     = ["nim-deepseek", "nim-qwen", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
+GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zai-turbo", "zai-flash", "zen-glm", "ant-sonnet", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zai-turbo", "zen-kimi", "zen-deepseek", "ant-sonnet", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
-REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "zen-free-ling", "zen-free-mimo", "zen-free-north", "mist-medium", "mist-magistral", "nim-qwen-max", "nim-nemotron", "zai-52", "zai-51", "zen-glm", "zen-qwen-max", "zen-free-nemotron", "ant-sonnet", "cop-opus"]  # zen-free-*/mist-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
+REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "zen-free-ling", "zen-free-mimo", "zen-free-north", "mist-medium", "mist-magistral", "nim-inkling", "nim-nemotron", "zai-52", "zai-51", "zen-glm", "zen-qwen-max", "zen-free-nemotron", "ant-sonnet", "cop-opus"]  # zen-free-*/mist-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
 AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mist-large", "mist-medium", "zai-turbo", "zen-glm", "zen-minimax", "ant-sonnet", "cop-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking

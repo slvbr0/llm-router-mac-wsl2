@@ -8,9 +8,9 @@ ALL_OK = {"nim": True, "zen": True, "copilot": True}
 
 
 def test_pool_gates_unhealthy_nim_but_keeps_paid():
-    health = {"nim-mistral": {"ok": False}}
+    health = {"nim-inkling": {"ok": False}}
     pool = bd.build_pool(CFG, ALL_OK, health)
-    assert "nim-mistral" not in pool
+    assert "nim-inkling" not in pool
     assert "zen-glm" in pool and "cop-opus" in pool     # paid always in
 
 
@@ -22,25 +22,25 @@ def test_pool_respects_availability_mask():
 def test_prior_mean_by_rank():
     assert bd.prior_mean("cop-opus", CFG) == 0.65       # frontier
     assert bd.prior_mean("zen-glm", CFG) == 0.55        # strong
-    assert bd.prior_mean("nim-mistral", CFG) == 0.45    # base
+    assert bd.prior_mean("nim-inkling", CFG) == 0.45    # base
     assert bd.prior_mean("zen-free-pickle", CFG) == 0.45  # unlisted -> base prior
 
 
 def test_cold_start_prefers_frontier_prior():
     random.seed(7)
-    b = bd.Bandit(["cop-opus", "nim-mistral"], CFG)
+    b = bd.Bandit(["cop-opus", "nim-inkling"], CFG)
     picks = [b.pick() for _ in range(200)]
-    assert picks.count("cop-opus") > picks.count("nim-mistral")
+    assert picks.count("cop-opus") > picks.count("nim-inkling")
 
 
 def test_bandit_learns_from_reward():
     random.seed(7)
-    b = bd.Bandit(["cop-opus", "nim-mistral"], CFG)
+    b = bd.Bandit(["cop-opus", "nim-inkling"], CFG)
     for _ in range(6):                                   # base-ranked arm keeps winning
-        b.update("nim-mistral", 1.0)
+        b.update("nim-inkling", 1.0)
         b.update("cop-opus", 0.0)
     picks = [b.pick() for _ in range(200)]
-    assert picks.count("nim-mistral") > picks.count("cop-opus")
+    assert picks.count("nim-inkling") > picks.count("cop-opus")
 
 
 def test_stats_snapshot():

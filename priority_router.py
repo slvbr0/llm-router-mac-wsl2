@@ -377,8 +377,9 @@ def _cost_class(model: str) -> int:
     # Marginal-cost order (all flat/sunk subs rank before real-per-token spend):
     #   0 free  ->  1 GO flat  ->  2 z.ai flat  ->  3 Anthropic Max + Codex flat  ->  4 zen paid  ->  5 copilot
     # GO flat leads the flat band, then z.ai. Anthropic Max and the Codex/ChatGPT subscription are
-    # both sunk-cost flat, so they SHARE class 3 and compete on measured latency rather than one
-    # always draining first. zen paid is the real-money backstop; copilot last.
+    # both sunk-cost flat, so they SHARE class 3; neither is latency-probed, so within the class
+    # the tier's config order decides — which is quota weight, not speed (see the tier comments).
+    # zen paid is the real-money backstop; copilot last.
     p = MODEL_PROVIDER.get(model, "")
     if p == "nim" or p == "mistral" or model.startswith("zen-free-"):
         return 0                       # free (NIM + Mistral free tier + zen free-tier)

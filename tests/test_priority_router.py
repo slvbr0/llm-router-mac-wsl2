@@ -739,3 +739,26 @@ def test_borrowing_never_breaks_the_cost_cascade():
 def test_free_pool_contains_only_free_models():
     for m in pr.FREE_POOL:
         assert pr._cost_class(m) == 0, f"{m} is in FREE_POOL but is not cost class 0"
+
+
+def test_health_probes_only_free_models():
+    """Ranking flat/subscription models by quota weight works ONLY because they are never
+    latency-probed: with no latency_ms they all tie at 10**9 and order_tier falls through to
+    config order (= quota order). Add a flat alias to nim_health.sh and that silently reverts
+    to latency ordering — no error, no failing test, just a subscription draining in the wrong
+    order (and the probe burning the quota it is held in reserve for). This is that guard."""
+    import re
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "nim_health.sh").read_text()
+    assigns = dict(re.findall(r'^(\w+)="([^"]*)"', script, re.M))
+    probed = []
+    for tok in assigns.get("ALL_ALIASES", "").split():
+        probed.extend(assigns.get(tok.lstrip("$"), "").split() if tok.startswith("$") else [tok])
+
+    assert probed, "could not parse ALL_ALIASES out of scripts/nim_health.sh"
+    for alias in probed:
+        assert pr._cost_class(alias) == 0, (
+            f"{alias} is latency-probed by nim_health.sh but is cost class "
+            f"{pr._cost_class(alias)}, not free"
+        )

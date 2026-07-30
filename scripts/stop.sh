@@ -7,11 +7,20 @@ cd "$(dirname "$0")/.."
 echo "① audit snapshot…"
 sh scripts/export_audit.sh
 
-# Stop OAuth proxy if running
-if [ -f /tmp/claude-oauth-proxy.pid ] && kill -0 "$(cat /tmp/claude-oauth-proxy.pid)" 2>/dev/null; then
-  kill "$(cat /tmp/claude-oauth-proxy.pid)" 2>/dev/null && rm -f /tmp/claude-oauth-proxy.pid
-  echo "   OAuth proxy stopped."
-fi
+# Stop the OAuth shims if running. Both are started by start.sh, so both stop here —
+# start.sh gained the Codex proxy without stop.sh gaining the matching kill, which left
+# an orphan holding :4042 across a --down.
+stop_proxy() {
+  pidfile="$1"; label="$2"
+  [ -f "$pidfile" ] || return 0
+  pid=$(cat "$pidfile" 2>/dev/null)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null && echo "   $label proxy stopped."
+  fi
+  rm -f "$pidfile"
+}
+stop_proxy /tmp/claude-oauth-proxy.pid Claude
+stop_proxy /tmp/codex-oauth-proxy.pid Codex
 
 if [ "$1" = "--down" ]; then
   echo "② stopping router containers (data kept in volumes)…"

@@ -9,6 +9,10 @@ logs/*.json
 logs/*.jsonl
 logs/*.err
 logs/*.log
+# .txt too: the OAuth shims log here (logs/codex_oauth_proxy.log) and a stray dump saved
+# as .txt would commit by default on a public repo. Curated bench receipts re-included.
+logs/*.txt
+!logs/bench*.txt
 
 # macOS
 .DS_Store

@@ -275,6 +275,27 @@ FREE_POOL = [
 # because it costs nothing. If they run dry, the layer-5 cost chain still covers it.
 FREE_FALLBACK_TIERS = ("cheap", "general", "code", "reason", "agent")
 
+# How demanding each tier is. Used for two things: borrowing may only go DOWN this scale, and a
+# very large prompt is refused a model that only ever qualified for the easy end of it.
+TIER_CAPABILITY = {"cheap": 0, "general": 1, "code": 2, "agent": 2, "reason": 3,
+                   "frontier": 4, "orchestrator": 4}
+
+
+def _capability_rank(model: str) -> int:
+    """Highest tier the model natively belongs to — its demonstrated capability level.
+
+    A model listed in REASON is trusted for anything easier; one listed only in CHEAP is not
+    trusted upward. Unlisted models (reachable only via the layer-5 chain) rank 0."""
+    return max((TIER_CAPABILITY.get(name, 0)
+                for name, tier in TIER_MAP.items() if model in tier), default=0)
+
+
+# Beyond this the prompt is a long agentic conversation, not a question, and a model that only
+# ever qualified for CHEAP/GENERAL must not answer it however fast or free it is. Observed in the
+# audit trail: big-pickle served 81,802 tokens and llama-3.3-70b served 79,948 — they returned
+# *something*, which is exactly why this failed silently instead of erroring.
+LARGE_PROMPT_TOKENS = 25_000
+
 AUTO_MODELS = ("", "auto", "default")
 
 CODE_MARKERS = re.compile(
@@ -460,7 +481,7 @@ def order_tier(tier: List[str], health: Dict[str, Any],
     return [m for _, m in sorted(enumerate(tier), key=lambda im: key(im))]
 
 
-def free_fallback(tier: List[str]) -> List[str]:
+def free_fallback(tier: List[str], min_rank: int = 0) -> List[str]:
     """tier + every other FREE alias not already in it.
 
     Free capacity is lumpy: NIM flaps, Mistral's key can lapse, zen-free rate-limits. Without
@@ -469,7 +490,10 @@ def free_fallback(tier: List[str]) -> List[str]:
     -> NIM so the steadier hosts lead (order_tier's stability rank agrees, this just makes the
     tiebreak deterministic)."""
     seen = set(tier)
-    extra = [m for m in FREE_POOL if m not in seen]
+    # ONE-DIRECTIONAL: only borrow a model that already qualifies for work at least this
+    # demanding. A capable free model may serve an easier tier (free is free); a cheap-tier model
+    # must never be pulled UP into CODE/REASON/AGENT just because it was idle and fast.
+    extra = [m for m in FREE_POOL if m not in seen and _capability_rank(m) >= min_rank]
     return tier + extra
 
 
@@ -507,10 +531,21 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     if tier not in ("frontier", "orchestrator"):
         tier_models = [m for m in tier_models if m not in PREMIUM_ONLY]
     native = set(tier_models)
+    # A very long prompt is an agentic conversation, not a question. Require real capability for
+    # it regardless of which tier the heuristics picked: the audit trail showed 24% of >20k-token
+    # requests being answered by CHEAP-tier models (big-pickle at 81,802 tokens, llama-3.3-70b at
+    # 79,948). They returned *something*, so nothing errored and the quality loss was invisible.
+    approx_tokens = len(prompt) // CHARS_PER_TOKEN
+    min_rank = TIER_CAPABILITY.get(tier, 0)
+    if approx_tokens >= LARGE_PROMPT_TOKENS:
+        min_rank = max(min_rank, TIER_CAPABILITY["code"])
+        tier_models = [m for m in tier_models
+                       if _capability_rank(m) >= min_rank or _cost_class(m) > 0]
     if tier in FREE_FALLBACK_TIERS:
-        # Borrow every other free alias as a tail. cost_class still dominates the sort, so these
-        # rank behind the tier's own free models but ahead of any flat/paid one.
-        tier_models = free_fallback(tier_models)
+        # Borrow other free aliases as a tail, but only ones already trusted at this level.
+        # cost_class still dominates the sort, so they rank behind the tier's own free models
+        # and ahead of any flat/paid one.
+        tier_models = free_fallback(tier_models, min_rank=min_rank)
     # (The brains grok/kimi-k3 are no longer boost-escalated here: they are RESTRICTED_AUTO —
     # explicit-only — so [BOOST] on the orchestrator tier just raises thinking depth on the
     # high-quota capables, never spends a low-quota brain that could overflow GO -> paid Zen.)

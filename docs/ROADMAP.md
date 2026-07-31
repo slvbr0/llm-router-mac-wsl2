@@ -82,6 +82,17 @@ one capable free model is as good as another and raw measured latency decides â€
 slower zen-free and vice versa. Every other tier keeps the tiebreak, so load-variable NIM does not
 lead a long piece of work just because it benchmarked quickly at that instant.
 
+Borrowing is **one-directional**, and a large prompt demands real capability:
+
+- Each model has a **capability rank** = the highest tier it natively belongs to. A model listed
+  in REASON is trusted for anything easier; one listed only in CHEAP is not trusted upward.
+- `free_fallback(tier, min_rank)` only borrows models already qualified at that level. A capable
+  free model may serve a cheaper tier (free is free); a cheap model is never pulled up.
+- Prompts at/over `LARGE_PROMPT_TOKENS` (25k) additionally require CODE-level capability, whatever
+  tier the heuristics chose. Measured before the fix: **24% of >20k-token requests were answered by
+  CHEAP-tier models** â€” big-pickle at 81,802 tokens, llama-3.3-70b at 79,948. Nothing errored;
+  they returned a worse answer, so the loss was invisible in the logs.
+
 Two asymmetric rules govern tier membership:
 
 - **Free borrows down.** A free model listed only in REASON is still offered to a CHEAP prompt.

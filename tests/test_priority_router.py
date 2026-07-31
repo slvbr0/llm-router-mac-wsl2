@@ -864,3 +864,44 @@ def test_free_borrows_down_but_flat_does_not():
     assert borrowed, "nothing was borrowed — free_fallback is not doing its job"
     for m in borrowed:
         assert pr._cost_class(m) == 0, f"{m} was borrowed into CHEAP but is not free"
+
+
+# --- borrowing is ONE-DIRECTIONAL + large prompts demand capability ----------------------------
+# Regression: the audit trail showed 24% of >20k-token requests answered by CHEAP-tier models
+# (big-pickle at 81,802 tokens, llama-3.3-70b at 79,948). Nothing errored — they returned a worse
+# answer — so the failure was invisible. Two causes, one test block each.
+
+def test_weak_models_are_never_borrowed_up_into_capable_tiers():
+    for tier in ("code", "reason", "agent"):
+        borrowed = [m for m in pr.free_fallback(pr.TIER_MAP[tier], pr.TIER_CAPABILITY[tier])
+                    if m not in pr.TIER_MAP[tier]]
+        for m in borrowed:
+            assert pr._capability_rank(m) >= pr.TIER_CAPABILITY[tier], (
+                f"{m} (rank {pr._capability_rank(m)}) borrowed up into {tier}")
+
+
+def test_capable_models_still_borrow_down_into_cheap():
+    # The direction that IS wanted: free is free, so a REASON-grade free model may answer a
+    # trivial prompt when cheap's own models are down.
+    borrowed = set(pr.free_fallback(pr.CHEAP_TIER, pr.TIER_CAPABILITY["cheap"])) - set(pr.CHEAP_TIER)
+    assert borrowed, "cheap borrowed nothing — the down direction regressed"
+    assert any(pr._capability_rank(m) >= pr.TIER_CAPABILITY["reason"] for m in borrowed)
+
+
+def test_large_prompt_never_routes_to_a_low_capability_model():
+    huge = "refactor the authentication module " * 6000      # ~37k tokens
+    assert len(huge) // pr.CHARS_PER_TOKEN >= pr.LARGE_PROMPT_TOKENS
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    # knock out the code tier's own free models so it must reach for a substitute
+    down = {m: {"ok": False} for m in pr.CODE_TIER if pr._cost_class(m) == 0}
+    got = pr.route(huge, {}, av, down)
+    assert got is not None
+    assert got not in pr.CHEAP_TIER, f"huge prompt routed to cheap-tier model {got}"
+    assert pr._capability_rank(got) >= pr.TIER_CAPABILITY["code"] or pr._cost_class(got) > 0
+
+
+def test_small_prompt_still_allowed_on_cheap_models():
+    # The size floor must not drag every short prompt up a tier.
+    got = route("say hi")
+    assert pr._cost_class(got) == 0
+    assert pr.classify("say hi") == "cheap"

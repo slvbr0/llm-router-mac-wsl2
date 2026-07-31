@@ -38,6 +38,15 @@ import uuid
 from pathlib import Path
 
 PORT = int(os.environ.get("CODEX_OAUTH_PORT", "4042"))
+# Bind address. Loopback by default, which is what macOS wants: Docker Desktop / OrbStack
+# proxy host.docker.internal to the host's loopback, so the router container reaches us.
+# On Linux/WSL2 host.docker.internal resolves to the docker bridge gateway instead, and a
+# loopback-bound socket is unreachable from a container — every cod-* call fails with a
+# connection error. start_codex_proxy.sh detects that case and points this at the bridge,
+# which containers and the host can reach but the LAN cannot. Never widen this to 0.0.0.0:
+# the proxy performs no inbound authentication, so anything that reaches it spends the
+# ChatGPT subscription.
+HOST = os.environ.get("CODEX_OAUTH_HOST", "127.0.0.1")
 CREDS_PATH = Path(os.environ.get("CODEX_CREDS_PATH", Path.home() / ".codex" / "auth.json"))
 UPSTREAM = "https://chatgpt.com/backend-api/codex/responses"
 SESSION_ID = uuid.uuid4().hex
@@ -235,10 +244,10 @@ class CodexProxyHandler(http.server.BaseHTTPRequestHandler):
 
 def main():
     tok, _, err = _token()
-    print(f"   Codex OAuth proxy on :{PORT} — " +
+    print(f"   Codex OAuth proxy on {HOST}:{PORT} — " +
           (json.dumps({"status": "ok", "creds": True, "session_id": SESSION_ID}) if tok
            else json.dumps({"status": "error", "creds": False, "reason": err})))
-    http.server.ThreadingHTTPServer(("127.0.0.1", PORT), CodexProxyHandler).serve_forever()
+    http.server.ThreadingHTTPServer((HOST, PORT), CodexProxyHandler).serve_forever()
 
 
 if __name__ == "__main__":

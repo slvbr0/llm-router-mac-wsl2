@@ -168,6 +168,3 @@ No performance claims here. Read the doc.
 - Wang et al., *Mixture-of-Agents Enhances Large Language Model Capabilities* — [arXiv:2406.04692](https://arxiv.org/abs/2406.04692)
 - Sakana AI, *Adaptive Branching Monte Carlo Tree Search* — [arXiv:2503.04412](https://arxiv.org/abs/2503.04412)
 - Ong et al., *RouteLLM: Learning to Route LLMs with Preference Data* — [arXiv:2406.18665](https://arxiv.org/abs/2406.18665)
-- [slvbr0/llm-router-v1-archive](https://github.com/slvbr0/llm-router-v1-archive) — the earlier WSL-only design this superseded.
-- [slvbr0/inverse-jobs](https://github.com/slvbr0/inverse-jobs) — scrapes job boards, scores postings against your profile, mails a daily digest of the few worth applying to by hand.
-- [slvbr0/audio-to-text-hours-long](https://github.com/slvbr0/audio-to-text-hours-long) — transcribes hours-long audio locally with chunked Whisper, then compresses and summarizes it.

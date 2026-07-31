@@ -297,6 +297,13 @@ def _capability_rank(model: str) -> int:
 # *something*, which is exactly why this failed silently instead of erroring.
 LARGE_PROMPT_TOKENS = 25_000
 
+# Cache preference has a *lower* floor than the capability floor above: they answer different
+# questions. 25k is "too big for a weak model"; this is "big enough that re-running prefill hurts".
+# A project hitting the router repeatedly with a fixed 8k prefix pays that prefill every call, and
+# cache_audit.sh already measures hit rates down to 3k — so gating preference at 25k threw away
+# data we had. Kept slightly above the audit floor so a verdict always has measured backing.
+CACHE_PREF_MIN_TOKENS = 4_000
+
 AUTO_MODELS = ("", "auto", "default")
 
 CODE_MARKERS = re.compile(
@@ -695,9 +702,10 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # 79,948). They returned *something*, so nothing errored and the quality loss was invisible.
     approx_tokens = (context_chars if context_chars is not None else len(prompt)) // CHARS_PER_TOKEN
     min_rank = TIER_CAPABILITY.get(tier, 0)
-    # Cache preference applies ONLY to large payloads. On a short prompt there is nothing to
-    # cache, so a model that never caches is not worse and must not be demoted for it.
-    cache_pref = cache if approx_tokens >= LARGE_PROMPT_TOKENS else None
+    # Cache preference applies ONLY once there is enough prefix to be worth caching. On a short
+    # prompt there is nothing to cache, so a model that never caches is not worse and must not be
+    # demoted for it. This floor is deliberately lower than the capability floor — see the constant.
+    cache_pref = cache if approx_tokens >= CACHE_PREF_MIN_TOKENS else None
     if approx_tokens >= LARGE_PROMPT_TOKENS:
         min_rank = max(min_rank, TIER_CAPABILITY["code"])
         tier_models = [m for m in tier_models

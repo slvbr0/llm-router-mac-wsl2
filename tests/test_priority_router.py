@@ -966,6 +966,19 @@ def test_small_payloads_ignore_the_cache_preference():
     assert pr._cost_class(small) == 0
 
 
+def test_mid_size_payloads_get_the_cache_preference():
+    # The cache floor is NOT the capability floor. A caller re-sending a fixed ~8k prefix pays the
+    # whole prefill on every request if the model cannot cache, long before the payload is "large".
+    assert pr.CACHE_PREF_MIN_TOKENS < pr.LARGE_PROMPT_TOKENS
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    mid = pr.CACHE_PREF_MIN_TOKENS * pr.CHARS_PER_TOKEN * 2          # ~8k tokens
+    assert mid // pr.CHARS_PER_TOKEN < pr.LARGE_PROMPT_TOKENS        # still under the capability floor
+    picked = pr.route("refactor this module", {"tier": "code"}, av, {}, mid, PROFILE)
+    # free-north heads CODE on latency but caches nothing; at this size that now costs it the slot.
+    assert picked != "free-north"
+    assert pr._cache_rank(picked, PROFILE) == 0
+
+
 def test_session_sticks_then_releases_on_tier_change_or_death():
     av = {p: True for p in pr.PRIORITY_CHAIN}
     pr._SESSION_MODELS.clear()

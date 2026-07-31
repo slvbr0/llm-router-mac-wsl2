@@ -521,7 +521,13 @@ def classify(prompt: str) -> str:
 
 
 def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool],
-          health: Optional[Dict[str, Any]] = None) -> Optional[str]:
+          health: Optional[Dict[str, Any]] = None,
+          context_chars: Optional[int] = None) -> Optional[str]:
+    """`prompt` is the LAST USER MESSAGE — that is what carries the tags and the content markers.
+    `context_chars` is the size of the WHOLE payload (system + history + tool results), which is
+    what the model actually has to read. They are wildly different: a user typing "fix this" into
+    an 80k-token session sends 2 tokens of prompt and 80k of context, and sizing on the prompt
+    alone is how big-pickle ended up serving 81,802 tokens."""
     health = health or {}
     tier = directives.get("tier") or classify(prompt)
     tier_models = TIER_MAP.get(tier, GENERAL_TIER)
@@ -535,7 +541,7 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # it regardless of which tier the heuristics picked: the audit trail showed 24% of >20k-token
     # requests being answered by CHEAP-tier models (big-pickle at 81,802 tokens, llama-3.3-70b at
     # 79,948). They returned *something*, so nothing errored and the quality loss was invisible.
-    approx_tokens = len(prompt) // CHARS_PER_TOKEN
+    approx_tokens = (context_chars if context_chars is not None else len(prompt)) // CHARS_PER_TOKEN
     min_rank = TIER_CAPABILITY.get(tier, 0)
     if approx_tokens >= LARGE_PROMPT_TOKENS:
         min_rank = max(min_rank, TIER_CAPABILITY["code"])
@@ -580,6 +586,10 @@ def extract_text(content: Any) -> str:
 class PriorityRouter(CustomLogger):
     async def async_pre_call_hook(self, user_api_key_dict, cache, data, call_type):
         messages = data.get("messages") or []
+        # Size of the ENTIRE payload the model must read — system prompt, full history, tool
+        # results — not just the turn the user typed. Routing capability off the last message
+        # alone let a 2-token "fix this" in an 80k session be treated as a trivial prompt.
+        context_chars = sum(len(extract_text(m.get("content", ""))) for m in messages)
         prompt, directives = "", {"tier": None, "allowed": None, "denied": set(), "boost": False}
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -599,7 +609,7 @@ class PriorityRouter(CustomLogger):
         health_probe = bool((data.get("metadata") or {}).get("health_probe"))
 
         if requested in AUTO_MODELS:
-            target = route(prompt, directives, availability, health)
+            target = route(prompt, directives, availability, health, context_chars)
             if target:
                 data["model"] = target
                 verbose_logger.info("PriorityRouter: auto -> %s", target)
@@ -608,7 +618,7 @@ class PriorityRouter(CustomLogger):
             unhealthy = (provider is not None and not availability.get(provider, True)) \
                 or (health.get(requested, {}).get("ok") is False)
             if unhealthy:
-                target = route(prompt, directives, availability, health)
+                target = route(prompt, directives, availability, health, context_chars)
                 if target:
                     verbose_logger.info("PriorityRouter: %s unavailable -> %s", requested, target)
                     data["model"] = target

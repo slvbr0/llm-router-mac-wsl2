@@ -905,3 +905,27 @@ def test_small_prompt_still_allowed_on_cheap_models():
     got = route("say hi")
     assert pr._cost_class(got) == 0
     assert pr.classify("say hi") == "cheap"
+
+
+def test_size_floor_measures_the_whole_payload_not_just_the_last_message():
+    """A short question inside a huge session must still get a capable model.
+
+    This is the ACTUAL shape of the bug seen in the audit trail. The hook parses tags and content
+    markers off the last user message, so sizing on that same string made a 2-token "fix this"
+    inside an 80k-token conversation look trivial — which is how big-pickle came to serve 81,802
+    prompt tokens. The model reads the whole payload, so the whole payload is what decides."""
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    huge_ctx = pr.LARGE_PROMPT_TOKENS * pr.CHARS_PER_TOKEN * 2      # ~50k tokens of history
+    got = pr.route("fix this", {}, av, {}, context_chars=huge_ctx)
+    # Assert CAPABILITY, not tier membership: a model can sit in CHEAP and still be capable
+    # (mis-codestral is a code specialist that also serves cheap work). What must never happen is
+    # a rank-0 model — one that only ever qualified for trivial prompts — taking an 80k payload.
+    assert pr._capability_rank(got) >= pr.TIER_CAPABILITY["code"] or pr._cost_class(got) > 0, (
+        f"short prompt in a huge session routed to low-capability {got} "
+        f"(rank {pr._capability_rank(got)})")
+
+
+def test_small_conversation_is_unaffected_by_the_payload_measure():
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    got = pr.route("say hi", {}, av, {}, context_chars=len("say hi"))
+    assert pr._cost_class(got) == 0

@@ -85,6 +85,25 @@ model_list:
   - model_name: zen-deepseek
     litellm_params: {model: openai/deepseek-v4-pro, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   # ===== opencode GO subscription (flat-rate plan, /zen/go/v1 — NOT per-token credits) =====
+  # Added 2026-07-30, ranked by GO quota (requests per 5h — higher = cheaper to spend):
+  #   deepseek-v4-flash 31,650 · mimo-v2.5 30,100 · qwen3.7-plus 4,300 · hy3 4,300
+  #   · deepseek-v4-pro 3,450 · mimo-v2.5-pro 3,250 · minimax-m3 3,200 · gpt-5.6-luna 2,050
+  #   · kimi-k2.7-code 1,350 · qwen3.7-max 950 · glm-5.2 880 · grok-4.5 120 · kimi-k3 110
+  # Skipped as dominated: minimax-m2.7, qwen3.6-plus, kimi-k2.6, glm-5.1.
+  - model_name: zen-mimo-lite
+    litellm_params: {model: openai/mimo-v2.5, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}   # 30,100/5h — the most generous capable GO model
+  - model_name: zen-hy3
+    litellm_params: {model: openai/hy3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}         # 4,300/5h — replaces the retired hy3-free
+  - model_name: zen-luna
+    litellm_params: {model: openai/gpt-5.6-luna, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY} # 2,050/5h — same model as cod-luna but GO flat = cost class 1, so preferred
+  - model_name: zen-minimax27
+    litellm_params: {model: openai/minimax-m2.7, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}  # 3,400/5h
+  - model_name: zen-qwen36
+    litellm_params: {model: openai/qwen3.6-plus, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}  # 3,300/5h — reasoner
+  - model_name: zen-kimi26
+    litellm_params: {model: openai/kimi-k2.6, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}     # 1,150/5h — reasoner
+  - model_name: zen-glm51
+    litellm_params: {model: openai/glm-5.1, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}       # 880/5h — reasoner
   - model_name: zen-kimi
     litellm_params: {model: openai/kimi-k2.7-code, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   - model_name: zen-minimax

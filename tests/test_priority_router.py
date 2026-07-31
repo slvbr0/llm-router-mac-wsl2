@@ -473,15 +473,27 @@ def test_orch_free_before_zen_full_avail():
     av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
     assert route("[BOOST][ORCH] wrong, redo", avail=av) == "mist-medium"
 
-def test_brains_never_auto_selected_in_any_tier_or_fallback():
-    # RESTRICTED_AUTO: _model_ok gates them out of pick_model AND the layer-5 chain everywhere.
+def test_brains_never_auto_selected_on_everyday_tiers():
+    # The scarce brains (grok 120 req/5h, kimi-k3 110) are allowed ONLY at the frontier tail.
+    # No everyday tier may reach them — not even with every other model health-gated down, which
+    # is the path that produced the surprise 63k-token kimi-k3 calls.
     av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
-    for m in ("zen-kimi-k3", "zen-grok"):
-        assert not pr._model_ok(m, av, {})
-    # Even with everything else health-gated down, route() must not return a brain.
-    allbad = {t: {"ok": False} for t in pr.MODEL_PROVIDER if t not in ("zen-kimi-k3", "zen-grok")}
-    got = route("[ORCH] x", avail=av, health=allbad)
-    assert got not in ("zen-kimi-k3", "zen-grok")
+    allbad = {t: {"ok": False} for t in pr.MODEL_PROVIDER if t not in pr.LAST_RESORT_BRAINS}
+    for tier in ("cheap", "general", "code", "reason", "agent", "orchestrator"):
+        got = pr.route("x", {"tier": tier}, av, allbad)
+        assert got not in pr.LAST_RESORT_BRAINS, f"{tier} reached a brain: {got}"
+
+
+def test_brains_are_the_frontier_tail_last_resort():
+    # Frontier normally picks something else...
+    av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
+    assert pr.route("x", {"tier": "frontier"}, av, {}) not in pr.LAST_RESORT_BRAINS
+    # ...but when every other frontier member is down, a brain IS the last thing tried.
+    down = {m: {"ok": False} for m in pr.FRONTIER_TIER if m not in pr.LAST_RESORT_BRAINS}
+    assert pr.route("x", {"tier": "frontier"}, av, down) in pr.LAST_RESORT_BRAINS
+    # They sit at the very end of the tier, after copilot.
+    for b in pr.LAST_RESORT_BRAINS:
+        assert pr.FRONTIER_TIER.index(b) > pr.FRONTIER_TIER.index("cop-opus")
 
 def test_brain_still_reachable_by_EXPLICIT_request():
     # Restriction is AUTO-only: if opencode explicitly names the alias, it still routes there.
@@ -668,7 +680,10 @@ def test_go_flat_beats_zai_when_free_reasoners_health_gated():
               avail={"mistral": False, "nim": False, "zai": True, "zen": True,
                      "anthropic": True, "copilot": True},
               health=health)
-    assert r == "zen-glm"       # GO flat beats z.ai
+    # Assert the INTENT (GO flat class 1 beats z.ai class 2), not a specific alias — which GO
+    # model wins depends on the quota ranking and changes as opencode adds models.
+    assert r in pr.ZEN_GO_ALIASES, f"expected a GO model, got {r}"
+    assert pr._cost_class(r) == 1 < pr._cost_class("zai-52")
 
 
 # --- Codex / ChatGPT subscription (flat, class 3 alongside Anthropic) -------------------------
@@ -762,3 +777,34 @@ def test_health_probes_only_free_models():
             f"{alias} is latency-probed by nim_health.sh but is cost class "
             f"{pr._cost_class(alias)}, not free"
         )
+# --- opencode GO quota ranking (2026-07-30) ----------------------------------------------------
+
+def test_go_luna_beats_codex_luna():
+    # Same underlying model (gpt-5.6-luna). GO is a flat subscription at cost class 1; Codex is
+    # class 3. Routing must prefer the cheaper class rather than the Codex proxy.
+    assert pr.order_tier(["cod-luna", "zen-luna"], {},
+                         native={"cod-luna", "zen-luna"})[0] == "zen-luna"
+
+
+def test_new_go_models_are_flat_class_one():
+    for m in ("zen-mimo-lite", "zen-hy3", "zen-luna"):
+        assert m in pr.ZEN_GO_ALIASES
+        assert pr._cost_class(m) == 1
+
+
+def test_generous_go_models_lead_their_band():
+    # Inside the GO band, config order encodes quota generosity (req/5h), since GO is never
+    # latency-probed: mimo-lite 30,100 > hy3 4,300 > luna 2,050 > glm-5.2 880.
+    go = [m for m in pr.order_tier(pr.GENERAL_TIER, {}, native=set(pr.GENERAL_TIER))
+          if m in pr.ZEN_GO_ALIASES]
+    assert go.index("zen-mimo-lite") < go.index("zen-glm")
+    assert go.index("zen-hy3") < go.index("zen-glm")
+
+
+def test_low_quota_brains_stay_out_of_the_go_band_after_expansion():
+    # grok 120/5h and kimi-k3 110/5h are the scarcest GO models. The roster grew to 17, but they
+    # must still appear in NO everyday tier — only the frontier tail.
+    for m in ("zen-grok", "zen-kimi-k3"):
+        for name, tier in pr.TIER_MAP.items():
+            if name != "frontier":
+                assert m not in tier, f"{m} leaked into {name}"

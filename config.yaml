@@ -45,7 +45,8 @@ model_list:
   # ===== z.ai GLM Coding Plan (flat-rate) — Anthropic-compat endpoint ONLY =====
   # The plan key 429s on the OpenAI /paas/v4 lane ("insufficient balance"); it works only via
   # /api/anthropic, so these use LiteLLM's anthropic/ provider (x-api-key + /v1/messages). Cost
-  # class 2 (flat, ranked AFTER opencode GO). zai-52/51 take the Anthropic thinking block.
+  # cost class 4 — the LAST flat lane, after GO(1)/Codex(2)/Anthropic(3). zai-52/51 take the
+  # Anthropic thinking block.
   # zai-flash = glm-4.7 (asking glm-4.5-air on this endpoint silently serves glm-4.7).
   - model_name: zai-turbo
     litellm_params: {model: anthropic/glm-5-turbo, api_base: https://api.z.ai/api/anthropic, api_key: os.environ/ZAI_API_KEY}
@@ -59,8 +60,8 @@ model_list:
   # ===== Codex / ChatGPT subscription (flat-rate) via providers/codex_oauth_proxy.py =====
   # The subscription serves GPT ONLY through chatgpt.com/backend-api/codex/responses (Responses
   # API, stream-only). api.openai.com 401s (missing scope) / 429s (no PAYG balance), so the local
-  # proxy on :4042 translates chat/completions <-> Responses. Cost class 3 — SHARES the flat band
-  # with Anthropic Max (both sunk-cost subs; latency decides between them). Fills a real gap: zen-gpt 401s and co-gpt fails via LiteLLM's Copilot path,
+  # proxy on :4042 translates chat/completions <-> Responses. Cost class 2 — spent after opencode
+  # GO (1) but before Claude Max (3). Fills a real gap: zen-gpt 401s and co-gpt fails via LiteLLM's Copilot path,
   # so this is the only working GPT lane. Tool-calling verified live.
   - model_name: cod-mini
     litellm_params: {model: openai/gpt-5.4-mini, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}   # ~1.1s, smallest quota burn, tool-capable
@@ -95,7 +96,7 @@ model_list:
   - model_name: go-hy3
     litellm_params: {model: openai/hy3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}         # 4,300/5h — replaces the retired hy3-free
   - model_name: go-luna
-    litellm_params: {model: openai/gpt-5.6-luna, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY} # 2,050/5h — same model as cod-luna but GO flat = cost class 1, so preferred
+    litellm_params: {model: openai/gpt-5.6-luna, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY} # 2,050/5h — same model as cod-luna, but GO(1) is spent before Codex(2), so this wins
   - model_name: go-minimax27
     litellm_params: {model: openai/minimax-m2.7, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}  # 3,400/5h
   - model_name: go-qwen36
@@ -126,8 +127,8 @@ model_list:
     litellm_params: {model: openai/kimi-k3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   # ===== Zen PAID per-token overflow ($20 balance, /zen/v1 + ZEN_PAID_API_KEY) =====
   # Used ONLY when GO flat-rate is exhausted (fallback) or on [BOOST] escalation. NOT in the
-  # health audit (probing would spend the balance) and NOT in default tiers. Cost class 2
-  # (per-token) sits below GO flat (class 1), so GO is always drained first.
+  # health audit (probing would spend the balance) and NOT in default tiers. Cost class 5 — real
+  # per-token money, so every flat lane (GO 1, Codex 2, Anthropic 3, z.ai 4) drains first.
   # cheap band ($/1M out): minimax 1.20, qwen-plus 1.60, glm 4.40
   - model_name: zen-minimax
     litellm_params: {model: openai/minimax-m3, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
@@ -207,19 +208,19 @@ router_settings:
   stream_timeout: 600         # never kill a stream mid-think (wait-it-out rule)
   # COMPLETE fallback map — EVERY model group has a chain (mid-stream failures on an
   # unlisted group hard-error instead of falling back; learned live on free-nemotron).
-  # Order per chain (marginal-cost cascade): free (NIM/Mistral/zen-free) -> z.ai flat -> GO flat
+  # Order per chain (marginal-cost cascade): free (NIM/Mistral/free-*) -> GO flat -> Codex flat
   # -> Anthropic Max flat -> PAID zen twin (last resort) -> copilot. Free ALWAYS before paid.
   fallbacks:
-    # Mistral free -> peer Mistral -> free NIM -> z.ai flat -> GO -> copilot (cost-ordered).
-    - mis-large: [mis-medium, mis-codestral, nim-inkling, zai-turbo, go-glm, co-sonnet]
-    - mis-codestral: [mis-large, nim-deepseek, zai-turbo, go-kimi, co-sonnet]
-    - mis-medium: [mis-magistral, mis-large, nim-glm, zai-52, go-glm, ant-sonnet]
-    - mis-magistral: [mis-medium, nim-glm, zai-52, go-glm, ant-sonnet]
-    # z.ai flat -> peer z.ai -> free -> GO -> Anthropic Max -> copilot.
-    - zai-turbo: [zai-flash, mis-large, go-glm, go-kimi, co-sonnet]
-    - zai-flash: [zai-turbo, mis-codestral, go-glm, co-sonnet]
-    - zai-52: [zai-51, mis-medium, go-glm, go-qwen-max, ant-sonnet, co-opus]
-    - zai-51: [zai-52, mis-medium, go-glm, go-qwen-max, ant-sonnet, co-opus]
+    # Mistral free -> peer Mistral -> free NIM -> GO -> z.ai -> copilot (cost-ordered).
+    - mis-large: [mis-medium, mis-codestral, nim-inkling, go-glm, zai-turbo, co-sonnet]
+    - mis-codestral: [mis-large, nim-deepseek, go-kimi, zai-turbo, co-sonnet]
+    - mis-medium: [mis-magistral, mis-large, nim-glm, go-glm, ant-sonnet, zai-52]
+    - mis-magistral: [mis-medium, nim-glm, go-glm, ant-sonnet, zai-52]
+    # z.ai flat -> free first -> GO -> Anthropic -> peer z.ai -> copilot (cost-ordered).
+    - zai-turbo: [mis-large, go-glm, go-kimi, zai-flash, co-sonnet]
+    - zai-flash: [mis-codestral, go-glm, zai-turbo, co-sonnet]
+    - zai-52: [mis-medium, go-glm, go-qwen-max, ant-sonnet, zai-51, co-opus]
+    - zai-51: [mis-medium, go-glm, go-qwen-max, ant-sonnet, zai-52, co-opus]
     - nim-glm: [nim-inkling, free-nemotron, go-glm, co-sonnet]
     - nim-inkling: [nim-gptoss, nim-glm, free-nemotron, go-glm, co-sonnet]
     - nim-gptoss: [nim-inkling, nim-glm, free-nemotron, go-glm, co-sonnet]
@@ -237,14 +238,14 @@ router_settings:
     # GO peers are useless — skip them. Order: free NIM/Mistral -> z.ai flat -> Anthropic Max flat
     # -> PAID twin (LAST, only if every free/flat option is down) -> copilot. Paid is NEVER reached
     # before free/flat capacity (that was billing 63k-token calls at ~$0.22 each on a saturated GO).
-    - go-glm: [nim-glm, mis-large, zai-turbo, ant-sonnet, zen-glm, co-sonnet]
-    - go-deepseek: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, co-sonnet]
+    - go-glm: [nim-glm, mis-large, ant-sonnet, zai-turbo, zen-glm, co-sonnet]
+    - go-deepseek: [nim-deepseek, nim-glm, ant-sonnet, zai-turbo, co-sonnet]
     - go-deepseek-flash: [free-deepseek, nim-deepseek-flash, nim-llama, zai-flash, co-haiku]
-    - go-kimi: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, co-sonnet]
-    - go-minimax: [nim-minimax, nim-glm, zai-turbo, ant-sonnet, zen-minimax, co-sonnet]
-    - go-qwen-max: [nim-nemotron, nim-glm, zai-52, ant-sonnet, zen-qwen-max, co-opus]
-    - go-mimo: [nim-glm, mis-large, zai-turbo, ant-sonnet, co-sonnet]
-    - go-qwen-plus: [nim-inkling, nim-glm, zai-52, ant-sonnet, zen-qwen-plus, co-opus]
+    - go-kimi: [nim-deepseek, nim-glm, ant-sonnet, zai-turbo, co-sonnet]
+    - go-minimax: [nim-minimax, nim-glm, ant-sonnet, zai-turbo, zen-minimax, co-sonnet]
+    - go-qwen-max: [nim-nemotron, nim-glm, ant-sonnet, zai-52, zen-qwen-max, co-opus]
+    - go-mimo: [nim-glm, mis-large, ant-sonnet, zai-turbo, co-sonnet]
+    - go-qwen-plus: [nim-inkling, nim-glm, ant-sonnet, zai-52, zen-qwen-plus, co-opus]
     # Orchestrator brains (low quota): a 429 degrades FREE-FIRST (free reasoner) -> Anthropic Max
     # (quality flat) -> z.ai flat -> PAID twin LAST RESORT -> copilot. Previously paid was 1st/2nd
     # here — that is exactly what billed the 63k brain calls. grok/kimi-k3 skip each other (both
@@ -257,28 +258,27 @@ router_settings:
     - zen-minimax: [zen-qwen-plus, zen-glm, co-sonnet]
     - zen-qwen-plus: [zen-glm, zen-minimax, co-sonnet]
     - zen-qwen-max: [zen-glm, zen-qwen-plus, co-opus]
-    - zen-grok: [zen-luna, zen-glm, ant-opus, co-opus]
-    - zen-kimi3: [zen-luna, zen-glm, ant-opus, co-opus]
-    - zen-sol: [zen-terra, zen-luna, ant-opus, co-opus]
-    - zen-terra: [zen-luna, zen-glm, ant-opus, co-opus]
-    - zen-luna: [zen-glm, zen-qwen-plus, ant-sonnet, co-sonnet]
+    - zen-grok: [zen-luna, zen-glm, co-opus]
+    - zen-kimi3: [zen-luna, zen-glm, co-opus]
+    - zen-sol: [zen-terra, zen-luna, co-opus]
+    - zen-terra: [zen-luna, zen-glm, co-opus]
+    - zen-luna: [ant-sonnet, zen-glm, zen-qwen-plus, co-sonnet]
     # Free native reasoners (were unlisted -> would hard-error mid-stream per the note above).
     - free-ling: [free-mimo, free-deepseek, nim-glm, go-glm]
     - free-laguna: [free-nemotron, free-deepseek, nim-glm, go-glm]
     - free-mimo: [free-ling, free-deepseek, nim-glm, go-glm]
     - free-north: [nim-deepseek, free-deepseek, go-glm, co-sonnet]
     - zen-gpt: [go-qwen-max, go-glm, co-opus, co-sonnet]
-    - zen-fable: [ant-opus, ant-fable, co-opus, zen-opus, zen-gpt, go-qwen-max]
-    - zen-opus: [ant-opus, ant-fable, co-opus, zen-fable, zen-gpt, go-qwen-max]
-    - co-opus: [ant-opus, ant-fable, co-sonnet, co-gemini, go-qwen-max, go-glm]
-    - ant-fable: [ant-opus, ant-sonnet, co-opus, zen-fable, zen-gpt, go-qwen-max]
-    - ant-sonnet: [ant-opus, co-sonnet, zen-fable, zen-gpt, go-qwen-max]
-    - ant-haiku: [ant-sonnet, co-haiku, go-glm, nim-inkling, free-nemotron]
-    - ant-opus: [ant-fable, ant-sonnet, co-opus, zen-fable, zen-opus, zen-gpt, go-qwen-max]
-    - co-sonnet: [ant-sonnet, co-opus, co-gemini, go-glm]
-    - co-gemini: [ant-sonnet, co-sonnet, go-glm, nim-glm]
-    - co-haiku: [ant-haiku, go-glm, nim-inkling, free-nemotron]
-
+    - zen-fable: [go-qwen-max, zen-opus, zen-gpt, co-opus]
+    - zen-opus: [go-qwen-max, zen-fable, zen-gpt, co-opus]
+    - co-opus: [go-qwen-max, go-glm, co-sonnet, co-gemini]
+    - ant-fable: [go-qwen-max, ant-opus, ant-sonnet, zen-fable, zen-gpt, co-opus]
+    - ant-sonnet: [go-qwen-max, zen-fable, zen-gpt, co-sonnet]
+    - ant-haiku: [nim-inkling, free-nemotron, go-glm, ant-sonnet, co-haiku]
+    - ant-opus: [go-qwen-max, ant-fable, ant-sonnet, zen-fable, zen-opus, zen-gpt, co-opus]
+    - co-sonnet: [go-glm, ant-sonnet, co-opus, co-gemini]
+    - co-gemini: [nim-glm, go-glm, ant-sonnet, co-sonnet]
+    - co-haiku: [nim-inkling, free-nemotron, go-glm, ant-haiku]
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   store_model_in_db: true

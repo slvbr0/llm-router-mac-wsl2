@@ -40,9 +40,19 @@ never disrupts them. No launchd services needed for Phase 1 — containers use
 
 | Alias prefix | Backend | Auth | Billing | Role |
 |---|---|---|---|---|
-| `nim-*` (11) | NVIDIA NIM | `NVIDIA_API_KEY` | free (load-variable) | workhorse, default GLM 5.2 |
-| `zen-*` / `free-*` | opencode Zen | `ZEN_API_KEY` | per-1M-tokens (free tier = $0) | conserve; cheap fallback |
-| `co-*` | GitHub Copilot | OAuth device flow | per-request credit | frontier last resort |
+| `nim-*` | NVIDIA NIM | `NVIDIA_API_KEY` | free (load-variable) | class 0 — workhorse |
+| `mis-*` | Mistral | `MISTRAL_API_KEY` | free tier | class 0 |
+| `free-*` | opencode Zen free tier | `ZEN_API_KEY` | $0 | class 0 |
+| `go-*` (17) | opencode GO subscription | `ZEN_API_KEY` | flat, quota per 5h | class 1 — most generous, spent first |
+| `cod-*` | Codex / ChatGPT | OAuth (`~/.codex/auth.json`) | flat subscription | class 2 |
+| `ant-*` | Anthropic Claude Max | OAuth (proxy `:4041`) | flat subscription | class 3 |
+| `zai-*` | z.ai GLM Coding Plan | `ZAI_API_KEY` | flat | class 4 |
+| `zen-*` | opencode Zen per-token | `ZEN_PAID_API_KEY` | real money | class 5 — backstop |
+| `co-*` | GitHub Copilot | OAuth device flow | per-request credit | class 6 — last |
+
+The prefix names the **billing lane**, not the vendor — so the cost of a routing decision is
+readable straight off an alias. Scarce or frontier-priced models (`go-grok`, `go-kimi-k3`,
+`cod-sol`, `ant-opus`, `ant-fable`) are confined to the frontier and orchestrator tiers.
 
 NIM model IDs verified live against `integrate.api.nvidia.com` 2026-07-06 (no drift).
 Aliases are **stable**; only `auto` is special (rewritten per request by the hook).
@@ -75,7 +85,7 @@ restart to apply changes). Both fail-open.
 NIM is free but throughput swings with NVIDIA's shared queue, so latency is the one
 thing the router can't assume. The audit measures it; the router consumes it.
 
-- Probes NIM + zen-free + zen-GO aliases (~21) **in parallel**; router sorts each tier by (cost class, measured latency) — free class = NIM vs zen-free compete; `[FRONTIER]` exempt (explicit intent). 15-min session refresher: `scripts/install_health_timer.sh` (launchd blocked by TCC on ~/Documents). opencode slash-commands: /refresh /current /info-* /speed /think /performance.
+- Probes **FREE aliases only** (NIM + Mistral free + `free-*`, ~21) **in parallel**. Flat lanes (GO, Codex, Anthropic, z.ai) are deliberately NOT probed — a probe spends the quota they are held in reserve for, and a subscription that authenticates works. Router sorts each tier by (cost class, native, stability, measured latency); CHEAP drops the stability term so raw speed decides among free models; `[FRONTIER]`/`[ORCH]` keep config (quality) order. 15-min session refresher: `scripts/install_health_timer.sh` (launchd blocked by TCC on ~/Documents). opencode slash-commands: /refresh /current /info-* /speed /think /performance.
 - Probes every alias **in parallel** (`&` + `wait`) → wall-clock ≈ slowest single
   probe (~11s), not the sum.
 - `max_tokens: 16` and a "reply OK" prompt — **not** `max_tokens: 1`, which

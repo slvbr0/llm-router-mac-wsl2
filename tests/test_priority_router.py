@@ -992,3 +992,35 @@ def test_session_key_is_stable_as_the_conversation_grows():
     grown = [first, {"role": "assistant", "content": "reply"}, {"role": "user", "content": "more"}]
     assert pr.session_key(short) == pr.session_key(grown)
     assert pr.session_key([{"role": "assistant", "content": "no user turn"}]) is None
+
+
+# --- Anthropic prompt caching (2026-07-31) ----------------------------------------------------
+# Anthropic is the ONLY lane that does not cache by itself. Zen (free + GO), z.ai and Codex all
+# cache automatically — verified live, and on z.ai sending cache_control changes nothing at all.
+# Without an explicit breakpoint ant-* re-read every payload: 1.87M prompt tokens, 0 cached.
+
+def test_anthropic_gets_two_cache_breakpoints():
+    data = {"messages": [{"role": "system", "content": "sys"},
+                         {"role": "user", "content": "old"},
+                         {"role": "assistant", "content": "reply"},
+                         {"role": "user", "content": "newest"}]}
+    assert pr.apply_anthropic_cache(data, "ant-sonnet", 5000) == 2
+    sysmsg = data["messages"][0]
+    assert sysmsg["content"][0]["cache_control"] == {"type": "ephemeral"}
+    # the newest turn must stay uncached — it is the part that changes
+    assert data["messages"][-1]["content"] == "newest"
+
+
+def test_non_anthropic_providers_are_left_alone():
+    # They cache automatically; an unexpected field is what 400s and then hides behind a fallback.
+    for m in ("go-glm", "free-north", "cod-luna", "zai-52", "nim-glm"):
+        data = {"messages": [{"role": "system", "content": "sys"},
+                             {"role": "user", "content": "hi"}]}
+        assert pr.apply_anthropic_cache(data, m, 5000) == 0
+        assert data["messages"][0]["content"] == "sys"      # untouched
+
+
+def test_small_anthropic_payloads_skip_caching():
+    # Below Anthropic's minimum cacheable prefix a breakpoint is rejected, not merely useless.
+    data = {"messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]}
+    assert pr.apply_anthropic_cache(data, "ant-sonnet", 100) == 0

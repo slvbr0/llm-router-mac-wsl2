@@ -456,6 +456,59 @@ def _sticky_put(key: Optional[str], tier: str, model: str) -> None:
     _SESSION_MODELS[key] = (tier, model)
 
 
+# Anthropic is the ONE lane that does not cache on its own. Zen (free + GO), z.ai and Codex all
+# cache automatically — verified live, and on z.ai sending cache_control changes nothing. Anthropic
+# requires an explicit breakpoint, so without this ant-* re-reads the entire payload every turn:
+# measured 1.87M prompt tokens with exactly 0 cached. With it, a 19,568-token payload came back as
+# 8 input + 19,559 cache_read on the following turn.
+#
+# Two breakpoints: the system prompt (stable for the whole session) and the end of the history
+# before the newest turn (grows, and is what makes an agentic session expensive). Anthropic allows
+# up to 4; using the minimum keeps the request shape simple.
+ANTHROPIC_CACHE_MIN_TOKENS = 2048       # haiku's floor; sonnet/opus cache from 1024
+
+
+def _mark_cache_control(msg: Dict[str, Any]) -> bool:
+    """Attach an ephemeral cache breakpoint to a message. True if it was applied.
+
+    Anthropic only accepts cache_control on a content BLOCK, so a plain string body has to be
+    promoted to a one-element block list first."""
+    content = msg.get("content")
+    if isinstance(content, str):
+        if not content:
+            return False
+        msg["content"] = [{"type": "text", "text": content,
+                           "cache_control": {"type": "ephemeral"}}]
+        return True
+    if isinstance(content, list) and content:
+        for block in reversed(content):
+            if isinstance(block, dict) and block.get("type") in ("text", None):
+                block["cache_control"] = {"type": "ephemeral"}
+                return True
+    return False
+
+
+def apply_anthropic_cache(data: Dict[str, Any], model: str, approx_tokens: int) -> int:
+    """Add cache breakpoints for Anthropic-served models. Returns how many were set.
+
+    No-op for every other provider: they cache automatically, and an unexpected field is exactly
+    the kind of thing that 400s and then hides behind a fallback."""
+    if MODEL_PROVIDER.get(model) != "anthropic" or approx_tokens < ANTHROPIC_CACHE_MIN_TOKENS:
+        return 0
+    messages = data.get("messages") or []
+    marked = 0
+    for msg in messages:                       # system prompt: stable for the session
+        if msg.get("role") == "system" and _mark_cache_control(msg):
+            marked += 1
+            break
+    # ...and the end of the history, so each turn reuses every turn before it.
+    for msg in reversed(messages[:-1]):
+        if msg.get("role") in ("user", "assistant") and _mark_cache_control(msg):
+            marked += 1
+            break
+    return marked
+
+
 def parse_request(prompt: str) -> Tuple[str, Dict[str, Any]]:
     directives: Dict[str, Any] = {"tier": None, "allowed": None, "denied": set(), "boost": False}
     for m in TAG_RE.finditer(prompt):
@@ -735,6 +788,15 @@ class PriorityRouter(CustomLogger):
                 if target:
                     verbose_logger.info("PriorityRouter: %s unavailable -> %s", requested, target)
                     data["model"] = target
+
+        # Anthropic is the only lane that needs an explicit cache breakpoint; every other provider
+        # caches on its own. Applied AFTER routing, so it keys off the model that will actually
+        # serve the request rather than the one that was asked for.
+        final_model_for_cache = data.get("model", "")
+        n_cache = apply_anthropic_cache(data, final_model_for_cache, context_chars // CHARS_PER_TOKEN)
+        if n_cache:
+            verbose_logger.info("PriorityRouter: %d anthropic cache breakpoint(s) on %s",
+                                n_cache, final_model_for_cache)
 
         # Inject thinking budget based on final model + tier
         final_model = data.get("model", "")

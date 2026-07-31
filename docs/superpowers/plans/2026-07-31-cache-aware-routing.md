@@ -66,6 +66,31 @@ creating it.
   and no explicit alias/tier tag overrides it.
 - Bounded dict (drop oldest past N) so a long-lived container cannot grow without limit.
 
+## Correction after live testing (same day)
+
+The plan's non-goal — "injecting `cache_control` would not help" — was **half wrong**, and the
+testing that proved it is the useful part:
+
+| lane | caches by itself? | needs `cache_control`? |
+|---|---|---|
+| Zen free + GO | yes | no |
+| z.ai | yes | **no** — sending it changes nothing (verified with unique cold prefixes) |
+| Codex | yes | no (our shim was hiding the counter, now fixed) |
+| **Anthropic `ant-*`** | **no** | **yes** |
+
+So caching is universal *except* Anthropic, which requires an explicit breakpoint and had
+therefore cached **nothing**: 1.87M prompt tokens, 0 cached. Injecting one turns a 19,568-token
+payload into `8 input + 19,559 cache_read` on the next turn.
+
+`apply_anthropic_cache()` now sets two breakpoints on Anthropic-served requests — the system
+prompt (stable all session) and the end of the history (what grows and makes an agentic session
+expensive) — leaving the newest turn uncached. Every other provider is untouched: they already
+cache, and an unexpected field is exactly what 400s and then hides behind a fallback.
+
+The cache-aware ordering stays, but its job is now narrow: the four models measured as caching
+*nothing at all* (`free-north`, `nim-step`, `go-hy3`, `free-laguna`). It is driven by a measured
+file, not a hand-kept list, so it corrects itself as providers change.
+
 ## Non-goals
 
 - **Injecting `cache_control`.** Anthropic-shaped lanes accept explicit breakpoints, but caching

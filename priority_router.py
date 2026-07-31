@@ -93,7 +93,7 @@ CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-la
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
-REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "cod-sol", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
+REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
 AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
@@ -119,6 +119,15 @@ FRONTIER_TIER = ["nim-glm", "nim-minimax", "mis-medium", "zai-52", "go-glm", "go
 # (this is what produced the surprise 63k-token kimi-k3 calls).
 LAST_RESORT_BRAINS = frozenset({"go-kimi-k3", "go-grok"})
 RESTRICTED_AUTO = LAST_RESORT_BRAINS   # back-compat alias
+
+# PREMIUM: scarce quota and/or frontier price. Allowed ONLY in the frontier and orchestrator
+# tiers, never on everyday work, no matter how much cheaper capacity is down. Each everyday tier
+# already carries its own flat fallback, so there is never a reason to reach for one of these:
+#   go-grok      120 req/5h      go-kimi-k3   110 req/5h    (the two scarcest GO models)
+#   cod-sol      10-100 msgs/5h, 125/750 credits per 1M     (25x go-luna)
+#   ant-opus / ant-fable          frontier-priced Claude
+# Enforced in route(); a test asserts none of them appears in an everyday tier list.
+PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "ant-opus", "ant-fable"})
 # Cost-safe order (explicit, NOT latency-sorted): FREE reasoners -> z.ai flat -> Anthropic Max flat
 # -> zen GO LAST. Even [BOOST][ORCH] stays on free/flat and only reaches zen GO if all of those are
 # down — because a GO 429 when saturated overflows to per-token Zen. zen paid is never in the tier
@@ -390,24 +399,31 @@ GO_ALIASES = {"go-glm", "go-deepseek", "go-kimi", "go-minimax",
 
 
 def _cost_class(model: str) -> int:
-    # Marginal-cost order (all flat/sunk subs rank before real-per-token spend):
-    #   0 free  ->  1 GO flat  ->  2 z.ai flat  ->  3 Anthropic Max + Codex flat  ->  4 zen paid  ->  5 copilot
-    # GO flat leads the flat band, then z.ai. Anthropic Max and the Codex/ChatGPT subscription are
-    # both sunk-cost flat, so they SHARE class 3; neither is latency-probed, so within the class
-    # the tier's config order decides — which is quota weight, not speed (see the tier comments).
-    # zen paid is the real-money backstop; copilot last.
+    # Marginal-cost order. Everything with a sunk/flat cost ranks before real per-token spend:
+    #   0 free           NIM + Mistral free + Zen free tier
+    #   1 GO flat        opencode GO subscription — the most generous allowances, spend these first
+    #   2 Codex flat     ChatGPT/Codex subscription
+    #   3 Anthropic flat Claude Max subscription
+    #   4 z.ai flat      GLM Coding Plan
+    #   5 zen paid       real per-token money — the backstop
+    #   6 copilot        per-request credit — last
+    # None of the flat lanes is latency-probed (probing burns the quota they are held in reserve
+    # for), so ORDER INSIDE a class is the tier's config order — which encodes quota generosity /
+    # price, most generous first. See the tier definitions.
     p = MODEL_PROVIDER.get(model, "")
     if p == "nim" or p == "mistral" or model.startswith("free-"):
-        return 0                       # free (NIM + Mistral free tier + zen free-tier)
+        return 0
     if model in GO_ALIASES:
-        return 1                       # opencode GO subscription flat-rate
+        return 1
+    if p == "codex":
+        return 2
+    if p == "anthropic":
+        return 3
     if p == "zai":
-        return 2                       # z.ai GLM Coding Plan (flat-rate)
-    if p == "anthropic" or p == "codex":
-        return 3                       # Claude Max OAuth + Codex/ChatGPT subscription (both flat/sunk)
+        return 4
     if p == "zen":
-        return 4                       # zen per-token paid credits ($20 backstop)
-    return 5                           # copilot per-request credit
+        return 5
+    return 6
 
 
 def _stability_rank(model: str) -> int:
@@ -488,8 +504,8 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # The scarce brains are allowed ONLY at the frontier tail. They are listed nowhere else, but
     # strip them defensively so a future tier edit can't quietly put a 110-req/5h model on routine
     # work — the failure mode is silent and expensive (GO saturation bills per-token Zen).
-    if tier != "frontier":
-        tier_models = [m for m in tier_models if m not in LAST_RESORT_BRAINS]
+    if tier not in ("frontier", "orchestrator"):
+        tier_models = [m for m in tier_models if m not in PREMIUM_ONLY]
     native = set(tier_models)
     if tier in FREE_FALLBACK_TIERS:
         # Borrow every other free alias as a tail. cost_class still dominates the sort, so these
@@ -508,7 +524,7 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
         for m in models:
             # The desperation walk must not reach a scarce brain on an everyday prompt: that is
             # precisely how kimi-k3 used to answer routine requests at 63k tokens. Frontier may.
-            if m in LAST_RESORT_BRAINS and tier != "frontier":
+            if m in PREMIUM_ONLY and tier not in ("frontier", "orchestrator"):
                 continue
             if _model_ok(m, availability, health):
                 return m

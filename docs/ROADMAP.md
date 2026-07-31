@@ -62,6 +62,39 @@ throttled paid arms and shifted to healthy NIM mid-search. 58 tests pass.
 
 ---
 
+## Cost cascade + tier policy (2026-07-30)
+
+```
+0 free      NIM · Mistral free · Zen free tier
+1 GO flat   opencode GO subscription — most generous allowances, spent first
+2 Codex     ChatGPT/Codex subscription
+3 Anthropic Claude Max subscription
+4 z.ai      GLM Coding Plan
+5 zen paid  real per-token money — the backstop
+6 copilot   per-request credit — last
+```
+
+No flat lane is latency-probed (probing burns the quota it is held in reserve for), so order
+INSIDE a class is the tier's config order, which encodes quota generosity / price.
+
+Two asymmetric rules govern tier membership:
+
+- **Free borrows down.** A free model listed only in REASON is still offered to a CHEAP prompt.
+  `free_fallback()` appends every other free alias to cheap/general/code/reason/agent; they rank
+  behind that tier's own free picks but ahead of every flat model, because cost class dominates.
+- **Flat does not borrow.** Each tier already carries a flat fallback picked for its own
+  cost/capability profile, so pulling another tier's flat model in would spend a subscription the
+  tier never budgeted for.
+
+**Premium confinement.** Scarce-quota or frontier-priced models are allowed in the frontier and
+orchestrator tiers only — `go-grok` (120 req/5h), `go-kimi-k3` (110), `cod-sol` (10-100 msgs/5h,
+25x go-luna's credit rate), `ant-opus`, `ant-fable`. Two guards enforce it: route() strips them
+from any other tier, and the layer-5 desperation walk skips them. Both are needed — without the
+second, a cheap prompt with everything health-gated down still walked into a brain, which is how
+kimi-k3 once answered routine prompts at 63k tokens.
+
+---
+
 ## Context-resend cost (measured 2026-07-28, not scheduled)
 
 Audit of 7 days of `LiteLLM_SpendLogs`, to find where input tokens actually go:

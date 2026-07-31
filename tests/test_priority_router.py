@@ -478,10 +478,11 @@ def test_brains_never_auto_selected_on_everyday_tiers():
     # No everyday tier may reach them — not even with every other model health-gated down, which
     # is the path that produced the surprise 63k-token kimi-k3 calls.
     av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
-    allbad = {t: {"ok": False} for t in pr.MODEL_PROVIDER if t not in pr.LAST_RESORT_BRAINS}
-    for tier in ("cheap", "general", "code", "reason", "agent", "orchestrator"):
+    allbad = {t: {"ok": False} for t in pr.MODEL_PROVIDER if t not in pr.PREMIUM_ONLY}
+    # NB: frontier and orchestrator are excluded — those two are exactly where premium belongs.
+    for tier in ("cheap", "general", "code", "reason", "agent"):
         got = pr.route("x", {"tier": tier}, av, allbad)
-        assert got not in pr.LAST_RESORT_BRAINS, f"{tier} reached a brain: {got}"
+        assert got not in pr.PREMIUM_ONLY, f"{tier} reached a premium model: {got}"
 
 
 def test_brains_are_the_frontier_tail_last_resort():
@@ -563,11 +564,11 @@ def test_orch_boss_distinct_from_worker_roles():
 PAID = ["zen-minimax", "zen-qwen-plus", "zen-glm", "zen-luna",
         "zen-grok", "zen-qwen-max", "zen-kimi3", "zen-terra", "zen-sol"]
 
-def test_paid_models_are_pertoken_cost_class_4():
+def test_paid_models_are_pertoken_cost_class_5():
     # per-token (class 4) sits BELOW every flat sub (z.ai 1, GO 2, Anthropic Max 3) and above only
     # copilot -> all flat-rate capacity is drained before the $20 balance is touched.
     for m in PAID:
-        assert pr._cost_class(m) == 4, f"{m} cost class {pr._cost_class(m)} != 4"
+        assert pr._cost_class(m) == 5, f"{m} cost class {pr._cost_class(m)} != 4"
 
 def test_paid_models_never_in_a_default_tier():
     # reached only via fallback map / boost, never auto-selected -> protects the balance.
@@ -594,24 +595,27 @@ def test_provider_map_knows_mistral_and_zai():
     assert pr.MODEL_PROVIDER["zai-flash"] == "zai"
 
 
-def test_cost_class_cascade_free_go_zai_flat_paid_copilot():
-    # The whole ordering intent in one assertion: strictly increasing marginal cost.
+def test_cost_class_cascade_is_free_go_codex_ant_zai_paid_copilot():
+    # The whole ordering intent in one assertion: strictly increasing marginal cost. Every
+    # flat/sunk subscription ranks before any real per-token spend.
     assert pr._cost_class("mis-large") == 0        # Mistral free
-    assert pr._cost_class("nim-glm") == 0           # NIM free
-    assert pr._cost_class("go-glm") == 1           # GO flat   (BEFORE z.ai)
-    assert pr._cost_class("zai-52") == 2            # z.ai flat
-    assert pr._cost_class("ant-sonnet") == 3        # Anthropic Max flat (BEFORE zen paid)
-    assert pr._cost_class("cod-sol") == 3           # Codex flat SHARES the Anthropic band
-    assert pr._cost_class("zen-glm") == 4      # zen per-token
-    assert pr._cost_class("co-opus") == 5          # copilot per-request
+    assert pr._cost_class("nim-glm") == 0          # NIM free
+    assert pr._cost_class("free-ling") == 0        # Zen free tier
+    assert pr._cost_class("go-glm") == 1           # opencode GO flat — most generous, spend first
+    assert pr._cost_class("cod-luna") == 2         # Codex/ChatGPT flat
+    assert pr._cost_class("ant-sonnet") == 3       # Claude Max flat
+    assert pr._cost_class("zai-52") == 4           # z.ai flat
+    assert pr._cost_class("zen-glm") == 5          # zen per-token (real money)
+    assert pr._cost_class("co-opus") == 6          # copilot per-request
 
 
 def test_go_flat_ranks_before_zai_in_reason_tier():
+    assert pr._cost_class("go-glm") < pr._cost_class("zai-52")
     # Sorted reason tier: free (mist/nim/zen-free) then GO go-glm(1) then z.ai(2) then ant(3).
     ordered = pr.order_tier(pr.REASON_TIER, {})
     assert ordered.index("go-glm") < ordered.index("zai-52")
     assert ordered.index("mis-medium") < ordered.index("go-glm")  # free before flat
-    assert ordered.index("ant-sonnet") > ordered.index("zai-52")    # anth after both flats
+    assert ordered.index("ant-sonnet") < ordered.index("zai-52")    # Anthropic flat before z.ai flat
 
 
 def test_anthropic_flat_ranks_before_zen_paid():
@@ -688,15 +692,16 @@ def test_go_flat_beats_zai_when_free_reasoners_health_gated():
 
 # --- Codex / ChatGPT subscription (flat, class 3 alongside Anthropic) -------------------------
 
-def test_codex_shares_the_anthropic_flat_band():
-    # Both are sunk-cost subscriptions: neither should always drain before the other.
-    for m in ("cod-sol", "cod-terra", "cod-luna"):
-        assert pr._cost_class(m) == pr._cost_class("ant-sonnet") == 3
+def test_codex_flat_precedes_anthropic_flat():
+    # Both are sunk-cost subscriptions, but Codex is spent before Claude Max.
+    for m in ("cod-sol", "cod-terra", "cod-luna", "cod-mini"):
+        assert pr._cost_class(m) == 2 < pr._cost_class("ant-sonnet")
 
 
-def test_codex_ranks_after_free_and_both_flats_but_before_zen_paid():
-    tier = ["zen-glm", "cod-luna", "zai-52", "go-glm", "nim-glm"]
-    assert pr.order_tier(tier, {}) == ["nim-glm", "go-glm", "zai-52", "cod-luna", "zen-glm"]
+def test_codex_ranks_after_go_but_before_anthropic_zai_and_paid():
+    tier = ["zen-glm", "zai-52", "ant-sonnet", "cod-luna", "go-glm", "nim-glm"]
+    assert pr.order_tier(tier, {}) == ["nim-glm", "go-glm", "cod-luna", "ant-sonnet", "zai-52", "zen-glm"]
+
 
 
 def test_codex_reasoner_gets_effort_knob_not_thinking_block():
@@ -808,3 +813,30 @@ def test_low_quota_brains_stay_out_of_the_go_band_after_expansion():
         for name, tier in pr.TIER_MAP.items():
             if name != "frontier":
                 assert m not in tier, f"{m} leaked into {name}"
+
+
+# --- premium confinement + free-borrows-down / flat-does-not ----------------------------------
+
+def test_premium_models_appear_in_no_everyday_tier_list():
+    """Scarce-quota or frontier-priced models belong to frontier/orchestrator only.
+
+    Every everyday tier already carries its own flat fallback, so reaching for one of these is
+    never justified. Guarding the LISTS (not just routing) because the expensive direction of
+    this mistake is silent: a 110-req/5h model quietly answering routine prompts."""
+    for name, tier in pr.TIER_MAP.items():
+        if name in ("frontier", "orchestrator"):
+            continue
+        leaked = [m for m in tier if m in pr.PREMIUM_ONLY]
+        assert not leaked, f"{name} tier lists premium model(s): {leaked}"
+
+
+def test_free_borrows_down_but_flat_does_not():
+    """Free capacity is shared across tiers; flat capacity is not.
+
+    A free model listed only in REASON must still be able to answer a CHEAP prompt (free is free).
+    A flat model must NOT, because each tier already has its own flat fallback chosen for that
+    tier's cost/capability — borrowing one would spend a subscription the tier didn't budget for."""
+    borrowed = set(pr.free_fallback(pr.CHEAP_TIER)) - set(pr.CHEAP_TIER)
+    assert borrowed, "nothing was borrowed — free_fallback is not doing its job"
+    for m in borrowed:
+        assert pr._cost_class(m) == 0, f"{m} was borrowed into CHEAP but is not free"

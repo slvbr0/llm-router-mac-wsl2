@@ -441,7 +441,7 @@ def _stability_rank(model: str) -> int:
 
 
 def order_tier(tier: List[str], health: Dict[str, Any],
-               native: Optional[Set[str]] = None) -> List[str]:
+               native: Optional[Set[str]] = None, stability: bool = True) -> List[str]:
     """Stable sort by (cost_class, native_rank, stability_rank, measured latency). Unprobed
     aliases keep their config position within the bucket (fail-open: no data -> no reordering).
 
@@ -455,7 +455,7 @@ def order_tier(tier: List[str], health: Dict[str, Any],
         lat = h.get("latency_ms")
         return (_cost_class(model),
                 0 if (native is None or model in native) else 1,
-                _stability_rank(model),
+                _stability_rank(model) if stability else 0,
                 lat if lat is not None else 10**9, idx)
     return [m for _, m in sorted(enumerate(tier), key=lambda im: key(im))]
 
@@ -475,9 +475,9 @@ def free_fallback(tier: List[str]) -> List[str]:
 
 def pick_model(tier: List[str], availability: Dict[str, bool],
                health: Dict[str, Any], latency_sort: bool = True,
-               native: Optional[Set[str]] = None) -> Optional[str]:
+               native: Optional[Set[str]] = None, stability: bool = True) -> Optional[str]:
     # latency_sort=False for explicit-intent tiers (FRONTIER lists copilot first ON PURPOSE)
-    candidates = order_tier(tier, health, native) if latency_sort else tier
+    candidates = order_tier(tier, health, native, stability) if latency_sort else tier
     for model in candidates:
         if _model_ok(model, availability, health):
             return model
@@ -514,9 +514,12 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # (The brains grok/kimi-k3 are no longer boost-escalated here: they are RESTRICTED_AUTO —
     # explicit-only — so [BOOST] on the orchestrator tier just raises thinking depth on the
     # high-quota capables, never spends a low-quota brain that could overflow GO -> paid Zen.)
+    # CHEAP drops the stability tiebreak: everything in reach there is free, so one capable free
+    # model is as good as another and raw speed is the only thing worth optimising. Elsewhere the
+    # tiebreak still protects a session from load-variable NIM leading a long piece of work.
     chosen = pick_model(tier_models, availability, health,
                         latency_sort=tier not in ("frontier", "orchestrator"),   # explicit-intent tiers keep config (quality) order
-                        native=native)
+                        native=native, stability=(tier != "cheap"))
     if chosen:
         verbose_logger.info("PriorityRouter: tier=%s -> %s", tier, chosen)
         return chosen

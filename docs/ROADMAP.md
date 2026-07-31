@@ -77,6 +77,11 @@ throttled paid arms and shifted to healthy NIM mid-search. 58 tests pass.
 No flat lane is latency-probed (probing burns the quota it is held in reserve for), so order
 INSIDE a class is the tier's config order, which encodes quota generosity / price.
 
+CHEAP is the one tier that ignores the stability tiebreak: everything reachable there is free, so
+one capable free model is as good as another and raw measured latency decides — a fast NIM beats a
+slower zen-free and vice versa. Every other tier keeps the tiebreak, so load-variable NIM does not
+lead a long piece of work just because it benchmarked quickly at that instant.
+
 Two asymmetric rules govern tier membership:
 
 - **Free borrows down.** A free model listed only in REASON is still offered to a CHEAP prompt.

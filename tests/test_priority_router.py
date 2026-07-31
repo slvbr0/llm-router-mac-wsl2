@@ -14,9 +14,33 @@ def route(prompt, avail=None, health=None):
     return pr.route(cleaned, directives, availability, health or {})
 
 
-def test_short_prompt_is_cheap_tier_stable_free_first():
-    # Stability-first: within the free class, zen-free/Mistral lead NIM. Cheap tier -> zen-free.
-    assert route("Say hi") == "free-deepseek"
+def test_short_prompt_is_cheap_tier_and_free():
+    # CHEAP drops the stability tiebreak — everything reachable there is free, so raw latency
+    # decides. With no health data every free model ties and config order wins.
+    got = route("Say hi")
+    assert pr._cost_class(got) == 0, f"cheap picked a non-free model: {got}"
+    assert got == "nim-llama"
+
+
+def test_cheap_picks_the_fastest_free_model_whatever_the_provider():
+    # The point of dropping stability in CHEAP: a fast NIM beats a slower zen-free, and vice
+    # versa. One capable free model is as good as another when the work is trivial.
+    fast_nim = {"nim-llama": {"ok": True, "latency_ms": 600},
+                "free-deepseek": {"ok": True, "latency_ms": 2200},
+                "free-pickle": {"ok": True, "latency_ms": 2100}}
+    assert route("Say hi", health=fast_nim) == "nim-llama"
+    fast_zen = {"nim-llama": {"ok": True, "latency_ms": 3000},
+                "nim-deepseek-flash": {"ok": True, "latency_ms": 3200},
+                "free-deepseek": {"ok": True, "latency_ms": 700}}
+    assert route("Say hi", health=fast_zen) == "free-deepseek"
+
+
+def test_reason_keeps_the_stability_tiebreak():
+    # Long/expensive work still prefers steady hosts over load-variable NIM even when NIM is
+    # momentarily faster — a flappy model must not lead a multi-minute task.
+    h = {"nim-glm": {"ok": True, "latency_ms": 500},
+         "free-ling": {"ok": True, "latency_ms": 3000}}
+    assert route("[REASON] prove it", health=h) == "free-ling"
 
 
 def test_default_general_is_stable_free():
@@ -542,7 +566,7 @@ def test_orch_l2_reasoners_get_high_others_off():
 
 def test_role_tags_map_to_worker_tiers():
     # Stability-first: workers land on the stable-free leader of their tier (zen-free), not NIM.
-    assert route("[SCOUT] list the files in this repo") == "free-deepseek"  # cheap
+    assert route("[SCOUT] list the files in this repo") == "nim-llama"      # cheap
     assert route("[ANALYST] interpret these benchmark numbers") == "free-ling"  # reason
     assert route("[VERIFIER] check this claim against the source") == "free-ling"
     assert route("[AUDITOR] does the code match the spec") == "free-ling"
@@ -726,7 +750,7 @@ def test_codex_non_reasoners_get_no_thinking_param():
 
 def test_tier_native_free_still_wins_when_healthy():
     # Borrowing must not disturb the normal case: the tier's own free pick still leads.
-    assert route("hi") == "free-deepseek"
+    assert route("hi") in pr.CHEAP_TIER
 
 
 def test_cheap_borrows_a_free_model_before_any_subscription():

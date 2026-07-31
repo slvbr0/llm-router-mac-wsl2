@@ -47,29 +47,29 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
     ],
     # Mistral free tier (api.mistral.ai, LiteLLM native mistral/). Capable models only:
     # large/codestral (non-reason) + medium/magistral (reason natively, no param). Free -> class 0.
-    "mistral": ["mist-large", "mist-codestral", "mist-medium", "mist-magistral"],
+    "mistral": ["mis-large", "mis-codestral", "mis-medium", "mis-magistral"],
     # z.ai GLM Coding Plan (flat-rate). Served ONLY via the Anthropic-compat endpoint
     # (/api/anthropic) — the OpenAI /paas/v4 lane 429s "insufficient balance". Wired as LiteLLM
     # anthropic/ provider; reasoners take the Anthropic thinking block. Flat -> class 1 (before GO).
     "zai": ["zai-turbo", "zai-52", "zai-51", "zai-flash"],
     "zen": [
-        "zen-free-deepseek", "zen-free-nemotron", "zen-free-pickle",
-        "zen-free-ling", "zen-free-laguna", "zen-free-mimo", "zen-free-north",
-        "zen-glm", "zen-deepseek", "zen-gpt", "zen-fable", "zen-opus",
+        "free-deepseek", "free-nemotron", "free-pickle",
+        "free-ling", "free-laguna", "free-mimo", "free-north",
+        "go-glm", "go-deepseek", "zen-gpt", "zen-fable", "zen-opus",
         # GO subscription (flat-rate /zen/go/v1): capable models, no per-token cost
-        "zen-mimo-lite", "zen-hy3", "zen-luna",   # added 2026-07-30, most generous GO quota first
-        "zen-minimax27", "zen-qwen36", "zen-kimi26", "zen-glm51",
-        "zen-kimi", "zen-minimax", "zen-qwen-max", "zen-qwen-plus", "zen-mimo", "zen-deepseek-flash",
-        # PAID per-token overflow ($20 balance) — class 2 (not in ZEN_GO_ALIASES), fallback/boost only
-        "zen-paid-minimax", "zen-paid-qwen-plus", "zen-paid-glm",
-        "zen-paid-luna", "zen-paid-grok", "zen-paid-qwen-max", "zen-paid-kimi3",
-        "zen-paid-terra", "zen-paid-sol",
+        "go-mimo-lite", "go-hy3", "go-luna",   # added 2026-07-30, most generous GO quota first
+        "go-minimax27", "go-qwen36", "go-kimi26", "go-glm51",
+        "go-kimi", "go-minimax", "go-qwen-max", "go-qwen-plus", "go-mimo", "go-deepseek-flash",
+        # PAID per-token overflow ($20 balance) — class 2 (not in GO_ALIASES), fallback/boost only
+        "zen-minimax", "zen-qwen-plus", "zen-glm",
+        "zen-luna", "zen-grok", "zen-qwen-max", "zen-kimi3",
+        "zen-terra", "zen-sol",
         # LAST_RESORT_BRAINS at the very end of the chain: only if literally everything else is gone.
-        "zen-grok", "zen-kimi-k3",
+        "go-grok", "go-kimi-k3",
     ],
     "copilot": [
-        "cop-opus", "cop-sonnet", "cop-gpt", "cop-codex", "cop-gemini",
-        "cop-haiku", "cop-mini",
+        "co-opus", "co-sonnet", "co-gpt", "co-codex", "co-gemini",
+        "co-haiku", "co-mini",
     ],
     # Claude Max subscription via OAuth (flat-rate, rate-limited by Anthropic)
     "anthropic": ["ant-fable", "ant-opus", "ant-sonnet", "ant-haiku"],
@@ -79,7 +79,7 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 
 # Tiers: NIM first (health-gated) -> Zen (free before paid) -> ant-* -> Copilot tail.
 # Copilot never appears in cheap/general — no per-request credit on routine work.
-# NOTE: GPT-family Copilot models (cop-gpt/cop-codex/cop-mini) fail via litellm's
+# NOTE: GPT-family Copilot models (co-gpt/co-codex/co-mini) fail via litellm's
 # Copilot path (GPT needs the /responses API). Use Claude/Gemini Copilot + Zen's
 # GPT (zen-gpt) for GPT needs instead. GPT-via-Copilot kept in config but unused.
 # Flat/subscription members are ordered by QUOTA WEIGHT, not latency: they are never
@@ -87,22 +87,22 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # is what decides inside a cost class. Codex quota per OpenAI's published table — credits/1M
 # in-out and messages per 5h window: luna 5/30 (250-2000 msgs) << mini 18.75/113 (60-350)
 # << 5.5 (15-80) << sol 125/750 (10-100). So luna leads: cheapest on quota AND newer-gen.
-CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "zen-free-deepseek", "zen-free-pickle", "mist-codestral", "zen-deepseek-flash", "zen-mimo-lite", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "cop-haiku"]  # zen-free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "zen-free-nemotron", "zen-free-laguna", "mist-large", "zen-mimo-lite", "zen-hy3", "zen-minimax27", "zen-qwen36", "zen-luna", "zen-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "cop-sonnet"]  # zen-free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
-CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "zen-free-north", "mist-large", "mist-codestral", "zen-luna", "zen-deepseek", "zen-kimi", "zen-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "cop-sonnet"]  # zen-free-north/nim-step = free code reasoners; mist-codestral = free code specialist
+CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "free-deepseek", "free-pickle", "mis-codestral", "go-deepseek-flash", "go-mimo-lite", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
+GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
-REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "zen-free-ling", "zen-free-mimo", "zen-free-north", "mist-medium", "mist-magistral", "nim-inkling", "nim-nemotron", "zen-hy3", "zen-qwen36", "zen-kimi26", "zen-glm", "zen-glm51", "zen-qwen-max", "zai-52", "zai-51", "zen-free-nemotron", "ant-sonnet", "cod-sol", "cop-opus"]  # zen-free-*/mist-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
-AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mist-large", "mist-medium", "zen-mimo-lite", "zen-luna", "zen-minimax27", "zen-minimax", "zen-glm", "zai-turbo", "ant-sonnet", "cod-terra", "cop-sonnet"]
+REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "cod-sol", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
+AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
 # zen-gpt dropped (dead: 401). Config order = intent (frontier is not latency-sorted).
-FRONTIER_TIER = ["nim-glm", "nim-minimax", "mist-medium", "zai-52", "zen-glm", "zen-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "cop-opus", "cop-sonnet", "cop-gemini",
-                 "zen-grok", "zen-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mist-medium(free)/zai-52(flat) reasoners between free NIM and GO
+FRONTIER_TIER = ["nim-glm", "nim-minimax", "mis-medium", "zai-52", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "co-opus", "co-sonnet", "co-gemini",
+                 "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free)/zai-52(flat) reasoners between free NIM and GO
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
-# QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (zen-glm, ant-sonnet/opus
+# QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
 # Max flat-rate, GO reasoners, nim-glm free) carry every verdict. The near-frontier brains
 # (grok/kimi-k3) are DELIBERATELY absent — they're RESTRICTED_AUTO (explicit-only), because their
 # low GO quota + GO->paid-Zen overflow on saturation make auto-selection a cost trap. Every member
@@ -110,34 +110,34 @@ FRONTIER_TIER = ["nim-glm", "nim-minimax", "mist-medium", "zai-52", "zen-glm", "
 # Orchestrator brains (grok-4.5, kimi-k3): near-frontier but LOW GO quota, and a GO 429 when the
 # plan is saturated overflows to PER-TOKEN Zen billing on the same account (both keys charge). So
 # they are RESTRICTED from ALL auto-routing — never selected by any tier, boost, or fallback.
-# Reachable ONLY by an explicit alias request (pick "zen-kimi-k3" yourself). Enforced in _model_ok,
+# Reachable ONLY by an explicit alias request (pick "go-kimi-k3" yourself). Enforced in _model_ok,
 # which is the single gate for every auto path (pick_model + the layer-5 chain).
 # The two scarcest GO models (grok-4.5 120 req/5h, kimi-k3 110 req/5h). NOT blocked outright:
 # reachable by naming the alias, and present at the very END of FRONTIER as the last thing tried
 # before giving up. Kept out of every other tier because a GO 429 when the plan is saturated
 # overflows to PER-TOKEN Zen billing on the same account — routine auto-selection is a cost trap
 # (this is what produced the surprise 63k-token kimi-k3 calls).
-LAST_RESORT_BRAINS = frozenset({"zen-kimi-k3", "zen-grok"})
+LAST_RESORT_BRAINS = frozenset({"go-kimi-k3", "go-grok"})
 RESTRICTED_AUTO = LAST_RESORT_BRAINS   # back-compat alias
 # Cost-safe order (explicit, NOT latency-sorted): FREE reasoners -> z.ai flat -> Anthropic Max flat
 # -> zen GO LAST. Even [BOOST][ORCH] stays on free/flat and only reaches zen GO if all of those are
 # down — because a GO 429 when saturated overflows to per-token Zen. zen paid is never in the tier
 # (reached only via a GO model's own fallback if literally everything else is unavailable). Brains
 # excluded (RESTRICTED_AUTO).
-ORCHESTRATOR_TIER = ["mist-medium", "nim-glm",                         # free reasoners
+ORCHESTRATOR_TIER = ["mis-medium", "nim-glm",                         # free reasoners
                      "zai-52",                                          # z.ai flat
                      "ant-sonnet", "ant-opus",                          # Anthropic Max flat
-                     "zen-glm", "zen-qwen-max", "zen-qwen-plus", "zen-deepseek", "zen-minimax", "zen-mimo"]  # zen GO LAST
+                     "go-glm", "go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo"]  # zen GO LAST
 
 # --- Thinking-capable model sets and budget table ---
 NIM_THINKING = frozenset({"nim-glm", "nim-minimax"})
-GO_THINKING  = frozenset({"zen-glm", "zen-glm51", "zen-qwen36", "zen-kimi26",
-                          "zen-kimi", "zen-minimax", "zen-grok", "zen-kimi-k3",
-                          "zen-qwen-max", "zen-qwen-plus", "zen-deepseek",  # verified live: these emit CoT
+GO_THINKING  = frozenset({"go-glm", "go-glm51", "go-qwen36", "go-kimi26",
+                          "go-kimi", "go-minimax", "go-grok", "go-kimi-k3",
+                          "go-qwen-max", "go-qwen-plus", "go-deepseek",  # verified live: these emit CoT
                           # PAID overflow reasoners (same underlying models -> reasoning_effort;
                           # gpt-5.6 luna/terra/sol take reasoning_effort too. minimax excluded: no CoT).
-                          "zen-paid-glm", "zen-paid-qwen-plus", "zen-paid-qwen-max", "zen-paid-grok",
-                          "zen-paid-kimi3", "zen-paid-luna", "zen-paid-terra", "zen-paid-sol"})
+                          "zen-glm", "zen-qwen-plus", "zen-qwen-max", "zen-grok",
+                          "zen-kimi3", "zen-luna", "zen-terra", "zen-sol"})
 # Codex reasoners: the proxy maps OpenAI `reasoning_effort` -> Responses `reasoning.effort`.
 COD_THINKING = frozenset({"cod-sol"})
 ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku excluded
@@ -145,16 +145,16 @@ ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku e
 # DEFAULT with no param, and reasoning_effort only REDUCES that trace. Free, so never a reason to
 # hold back — always HIGH, and we inject NO param so their native max-depth reasoning is preserved
 # (a param here would shrink it for zero benefit). They exist only for the annotation + tiering.
-FREE_REASONERS = frozenset({"zen-free-ling", "zen-free-mimo", "zen-free-north"})
+FREE_REASONERS = frozenset({"free-ling", "free-mimo", "free-north"})
 # Mistral reasoners (magistral / mistral-medium hybrid): reason natively on api.mistral.ai with NO
 # param — verified live, they 200 with reasoning inline (no separate reasoning_content field to
 # toggle). Treated like FREE_REASONERS: inject nothing, annotate high.
-MIST_REASONERS = frozenset({"mist-medium", "mist-magistral"})
+MIS_REASONERS = frozenset({"mis-medium", "mis-magistral"})
 # NIM native reasoners: step-3.7-flash emits a reasoning_content trace by DEFAULT (verified live:
 # 1505 chars with no param; enable_thinking barely changes it). So it is NOT in NIM_THINKING —
 # it needs no chat_template_kwargs toggle; treat it like the other native reasoners (inject none).
 NIM_NATIVE = frozenset({"nim-step"})
-NATIVE_REASONERS = FREE_REASONERS | MIST_REASONERS | NIM_NATIVE
+NATIVE_REASONERS = FREE_REASONERS | MIS_REASONERS | NIM_NATIVE
 # z.ai GLM reasoners on the Anthropic-compat endpoint: verified live they accept the Anthropic
 # thinking block {"type":"enabled","budget_tokens":N} and return a `thinking` content block. Same
 # injection + budget table as ANT_THINKING (think-class "ant"), even though cost-wise they're flat.
@@ -229,9 +229,9 @@ def _trigger_free_refresh() -> None:
 
 def _served_is_paid(model: Any) -> bool:
     # response.model / chunk.model echoes the deployment ALIAS (verified: health asserts served==alias),
-    # so a paid call is exactly a zen-paid-* alias. Underlying model names are shared with GO twins,
+    # so a paid call is exactly a zen-* alias. Underlying model names are shared with GO twins,
     # so only the alias distinguishes paid from flat — never match on the underlying id.
-    return isinstance(model, str) and model.startswith("zen-paid-")
+    return isinstance(model, str) and model.startswith("zen-")
 
 
 def _write_think_state(model: str, tier: str, level: str) -> None:
@@ -254,9 +254,9 @@ TIER_MAP = {
 # borrowed free model answers instead of a flat subscription. RESTRICTED_AUTO is irrelevant here
 # (the brains are not free), but _model_ok still gates everything at pick time.
 FREE_POOL = [
-    "zen-free-nemotron", "zen-free-ling", "zen-free-north", "zen-free-mimo",
-    "zen-free-deepseek", "zen-free-pickle", "zen-free-laguna",
-    "mist-large", "mist-medium", "mist-codestral", "mist-magistral",
+    "free-nemotron", "free-ling", "free-north", "free-mimo",
+    "free-deepseek", "free-pickle", "free-laguna",
+    "mis-large", "mis-medium", "mis-codestral", "mis-magistral",
     "nim-glm", "nim-inkling", "nim-step", "nim-gptoss", "nim-deepseek",
     "nim-nemotron", "nim-minimax", "nim-deepseek-flash", "nim-llama", "nim-nemotron-super",
 ]
@@ -382,11 +382,11 @@ def _model_ok(model: str, availability: Dict[str, bool], health: Dict[str, Any])
 # what decides: deepseek-flash 31,650 > mimo-lite 30,100 > qwen-plus 4,300 = hy3 4,300 >
 # deepseek 3,450 > mimo 3,250 > minimax 3,200 > luna 2,050 > kimi 1,350 > qwen-max 950 >
 # glm 880 >> grok 120 / kimi-k3 110 (the two RESTRICTED brains).
-ZEN_GO_ALIASES = {"zen-glm", "zen-deepseek", "zen-kimi", "zen-minimax",
-                  "zen-qwen-max", "zen-qwen-plus", "zen-mimo", "zen-deepseek-flash",
-                  "zen-mimo-lite", "zen-hy3", "zen-luna",
-                  "zen-minimax27", "zen-qwen36", "zen-kimi26", "zen-glm51",
-                  "zen-grok", "zen-kimi-k3"}
+GO_ALIASES = {"go-glm", "go-deepseek", "go-kimi", "go-minimax",
+                  "go-qwen-max", "go-qwen-plus", "go-mimo", "go-deepseek-flash",
+                  "go-mimo-lite", "go-hy3", "go-luna",
+                  "go-minimax27", "go-qwen36", "go-kimi26", "go-glm51",
+                  "go-grok", "go-kimi-k3"}
 
 
 def _cost_class(model: str) -> int:
@@ -397,9 +397,9 @@ def _cost_class(model: str) -> int:
     # the tier's config order decides — which is quota weight, not speed (see the tier comments).
     # zen paid is the real-money backstop; copilot last.
     p = MODEL_PROVIDER.get(model, "")
-    if p == "nim" or p == "mistral" or model.startswith("zen-free-"):
+    if p == "nim" or p == "mistral" or model.startswith("free-"):
         return 0                       # free (NIM + Mistral free tier + zen free-tier)
-    if model in ZEN_GO_ALIASES:
+    if model in GO_ALIASES:
         return 1                       # opencode GO subscription flat-rate
     if p == "zai":
         return 2                       # z.ai GLM Coding Plan (flat-rate)
@@ -417,7 +417,7 @@ def _stability_rank(model: str) -> int:
     (Only breaks ties inside one cost class — cost_class still dominates, so this never lifts a
     free model above a cheaper one or vice-versa.)"""
     p = MODEL_PROVIDER.get(model, "")
-    if p == "mistral" or model.startswith("zen-free-"):
+    if p == "mistral" or model.startswith("free-"):
         return 0        # stable free — preferred
     if p == "nim":
         return 1        # NIM free is load-variable — used after Mistral/zen-free
@@ -579,7 +579,7 @@ class PriorityRouter(CustomLogger):
                 # silently serves a different provider, so this is invisible without fallbacks off.
                 data["thinking"] = {"type": "enabled", "budget_tokens": tokens}
             elif final_model in NATIVE_REASONERS:
-                # Native reasoners (zen-free-* + Mistral magistral/medium): reason at max depth with
+                # Native reasoners (free-* + Mistral magistral/medium): reason at max depth with
                 # NO param (reasoning_effort only shrinks it; Mistral has no toggle at all). Inject
                 # nothing — annotate high, let them run.
                 pass

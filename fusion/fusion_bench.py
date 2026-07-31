@@ -1,5 +1,5 @@
 """A/B harness: fusion committee vs single frontier baseline, blind-judged.
-Usage: python3 fusion/fusion_bench.py fusion/prompts.sample.txt [--baseline cop-opus] [--judge nim-qwen-max]
+Usage: python3 fusion/fusion_bench.py fusion/prompts.sample.txt [--baseline co-opus] [--judge nim-qwen-max]
 """
 import argparse, json, random, sys, time
 from pathlib import Path
@@ -38,7 +38,7 @@ def main():
     fwall, bwall = [], []
     for i, p in enumerate(prompts, 1):
         if i > 1:
-            time.sleep(60)      # pace the baseline — hammering cop-opus back-to-back gets
+            time.sleep(60)      # pace the baseline — hammering co-opus back-to-back gets
                                 # throttled (bench12: 11 straight b_ok=False after prompt 1)
         print(f"[{i}/{len(prompts)}] fusing…", file=sys.stderr)
         tag = "[NOVEL TREE] " if args.tree else "[NOVEL] "

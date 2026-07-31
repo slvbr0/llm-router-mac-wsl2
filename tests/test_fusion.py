@@ -46,11 +46,11 @@ def test_panel_skips_masked_provider():
 
 
 def test_aggregator_first_healthy():
-    # deep aggregator is [zen-glm, cop-opus, nim-nemotron, nim-inkling]; zen masked ->
-    # skip unhealthy nim-nemotron too -> cop-opus
+    # deep aggregator is [go-glm, co-opus, nim-nemotron, nim-inkling]; zen masked ->
+    # skip unhealthy nim-nemotron too -> co-opus
     health = {"nim-nemotron": {"ok": False}}
     p = fu.build_panel("deep", CFG, {"nim": True, "zen": False, "copilot": True}, health)
-    assert p["aggregator"] == "cop-opus"
+    assert p["aggregator"] == "co-opus"
 
 
 def test_parse_novel_tags():
@@ -84,7 +84,7 @@ def test_fuse_happy_path_aggregates(monkeypatch):
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
     monkeypatch.setattr(fu, "call_model", _stub_call({
-        "nim-inkling": "draft A", "zen-free-deepseek": "draft B", "nim-llama": "draft C"}))
+        "nim-inkling": "draft A", "free-deepseek": "draft B", "nim-llama": "draft C"}))
     out = fu.fuse("[NOVEL] short task", conduct=False)
     assert out["answer"] == "draft A"           # aggregator nim-inkling stubbed -> its content
     assert out["receipt"]["degraded"] is False
@@ -104,14 +104,14 @@ def test_fuse_degrades_when_proposers_fail(monkeypatch):
 
 
 def test_auto_escalates_when_degraded(monkeypatch):
-    # easy panel degrades (only 1 proposer ok); hard panel adds cop-haiku -> 2 ok -> not degraded
+    # easy panel degrades (only 1 proposer ok); hard panel adds co-haiku -> 2 ok -> not degraded
     monkeypatch.setattr(fu, "load_availability", lambda: dict(ALL_OK))
     monkeypatch.setattr(fu, "load_health", lambda: {})
     monkeypatch.setattr(fu, "load_env", lambda: {"LITELLM_MASTER_KEY": "k"})
     monkeypatch.setattr(fu, "_log", lambda r: None)
     monkeypatch.setattr(fu, "call_model", _stub_call({
-        "nim-inkling": "m", "cop-haiku": "h", "nim-nemotron": "q",
-        "zen-glm": "z", "zen-kimi": "k"}))   # easy: 1 ok; hard: enough ok + agg (GO models in pool)
+        "nim-inkling": "m", "co-haiku": "h", "nim-nemotron": "q",
+        "go-glm": "z", "go-kimi": "k"}))   # easy: 1 ok; hard: enough ok + agg (GO models in pool)
     out = fu.fuse("[NOVEL] short task", conduct=False)
     assert out["receipt"]["escalation_path"] == ["easy", "hard"]
     assert out["receipt"]["degraded"] is False
@@ -136,7 +136,7 @@ def test_research_requires_confirm(monkeypatch):
 
 def test_copilot_cost_counted():
     cfg = fu.load_config()
-    entries = [{"alias": "cop-sonnet", "provider": "copilot", "ok": True, "tokens": 500},
+    entries = [{"alias": "co-sonnet", "provider": "copilot", "ok": True, "tokens": 500},
                {"alias": "nim-glm", "provider": "nim", "ok": True, "tokens": 400},
                {"alias": "zen-gpt", "provider": "zen", "ok": True, "tokens": 1000}]
     c = fu.estimate_cost(entries, cfg)
@@ -159,7 +159,7 @@ def test_fuse_dispatches_tree(monkeypatch):
 
 
 # --- judges must not think ---------------------------------------------------------------------
-# A judge that gets a thinking budget injected inherits that provider's thinking support. zen-glm
+# A judge that gets a thinking budget injected inherits that provider's thinking support. go-glm
 # has none: it 400s on the router's thinking params. The judge call then fails, returns None, is
 # excluded from the mean, and a two-judge bias control silently collapses onto the baseline's own
 # family judge -- without a single visible number changing. This cost a full bench run on

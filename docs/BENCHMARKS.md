@@ -5,9 +5,9 @@ scores 1–10, unparseable judge outputs excluded. Logs in `logs/bench*.txt`.
 
 ## Bench 1 — greedy conductor vs Copilot Opus (2026-07-06, n=4)
 
-`python3 fusion/fusion_bench.py fusion/prompts.bench4.txt --conduct` · judge cop-haiku
+`python3 fusion/fusion_bench.py fusion/prompts.bench4.txt --conduct` · judge co-haiku
 
-| Prompt | Fusion (greedy) | cop-opus |
+| Prompt | Fusion (greedy) | co-opus |
 |---|---|---|
 | Monotone-convergence proof | **10** | 3 |
 | Rate limiter design | **9** | 7 |
@@ -16,27 +16,27 @@ scores 1–10, unparseable judge outputs excluded. Logs in `logs/bench*.txt`.
 
 ```
 FUSION   avg 8.50   est cost $0.08   $/point 0.0094
-BASELINE avg 6.50   est cost $0.16   $/point 0.0246   (cop-opus)
+BASELINE avg 6.50   est cost $0.16   $/point 0.0246   (co-opus)
 LATENCY  fusion 55s vs baseline 635s
 → hypothesis SUPPORTED
 ```
 
 Caveats: n=4, single judge, baseline prompt-1 likely truncated near its 6000-token cap
 (inflates one row). NIM was 6/11 healthy → fusion cost pessimistic. Signal, not proof.
-Gotcha discovered: cop-opus hides extended thinking that eats the token budget — a
+Gotcha discovered: co-opus hides extended thinking that eats the token budget — a
 1500-token cap returned *empty* answers; the harness now uses 6000 tokens + 1200s
 (wait it out, never truncate mid-think). Log: `logs/bench4-conduct-final-194009.txt`.
 
-## Bench 2 — Task 9 3-way: TREE vs greedy vs zen-glm (2026-07-07, n=12)
+## Bench 2 — Task 9 3-way: TREE vs greedy vs go-glm (2026-07-07, n=12)
 
 `fusion/prompts.bench12.txt` (code-weighted + math + design + concept) · baseline
-**zen-glm** (GLM 5.2 via GO subscription, the strongest flat-rate single model) ·
+**go-glm** (GLM 5.2 via GO subscription, the strongest flat-rate single model) ·
 judge **nim-kimi** (independent provider — no self-judging).
 
 | Engine | Avg quality | Scored | Latency/prompt |
 |---|---|---|---|
 | **`[NOVEL TREE]` (Multi-LLM AB-MCTS, v2.1.1)** | **9.10** | 10/12* | ~18 min |
-| zen-glm single-shot | 8.40 / 8.33 | — | ~2 min |
+| go-glm single-shot | 8.40 / 8.33 | — | ~2 min |
 | `[NOVEL]` greedy conductor (v2.1) | 7.92 | 12/12 | ~3 min |
 
 \* 2 skips = router restarts during the run (fallback/timeout fixes), not the engine.
@@ -64,7 +64,7 @@ pairwise, answer order randomised, two independent judges, both scored all 15 pr
   frontier baseline).
 - **B = `[NOVEL TREE]` fusion committee.**
 - **C = B + one ant-opus audit pass.**
-- Judges: **ant-haiku** and **zen-glm** (cross-family, no self-judging on either
+- Judges: **ant-haiku** and **go-glm** (cross-family, no self-judging on either
   side). Auditor for arm C: **ant-opus**.
 
 ```
@@ -76,13 +76,13 @@ C (fusion+audit) avg 8.40   cost $0.458–0.489 (bounds)    latency 524s
 
 ### Quality (cross-judge mean, 1–10)
 
-| Arm | ant-haiku | zen-glm | cross-judge mean |
+| Arm | ant-haiku | go-glm | cross-judge mean |
 |---|---|---|---|
 | A — fable | 8.77 | 9.07 | **8.92** |
 | B — fusion | 9.07 | 8.27 | 8.67 |
 | C — fusion+audit | 8.73 | 8.07 | 8.40 |
 
-Judges disagree on *direction* — ant-haiku prefers fusion, zen-glm prefers fable. No
+Judges disagree on *direction* — ant-haiku prefers fusion, go-glm prefers fable. No
 family bias as predicted (each judge doesn't favor its own family).
 
 ### Head-to-head (30 judge-prompt pairs = 15 prompts × 2 judges)
@@ -115,7 +115,7 @@ token at $0 (a true lower bound), B's floor $0.325 is still > A's $0.128. No mis
 price can flip this. → B ≈ 2.5× dearer, C ≈ 3.6× dearer.
 
 Caveat: 164,810 fusion tokens (~33% of B) had no published price. The point estimate
-bills them at GLM 5.2 rates, which is **not** a strict upper bound (zen-qwen-max lists
+bills them at GLM 5.2 rates, which is **not** a strict upper bound (go-qwen-max lists
 above it) — that's why the "not cheaper" claim above cites the *lower* bound, not the
 point estimate.
 

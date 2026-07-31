@@ -13,7 +13,7 @@ Copilot remains as fallback when credits available.
 **Phase 1.6 (Adaptive thinking depth — BUILT):** Auto-inject reasoning budgets based on
 routing tier and provider cost-class. 87 tests pass. Details:
 - `nim-glm / nim-kimi / nim-minimax` → **HIGH** (32 768 tokens) on REASON/CODE/AGENT/FRONTIER — free, no cost reason to hold back
-- `zen-glm / zen-kimi / zen-minimax` → MEDIUM (8 192) on REASON/CODE/AGENT; HIGH (16 384) on FRONTIER
+- `go-glm / go-kimi / go-minimax` → MEDIUM (8 192) on REASON/CODE/AGENT; HIGH (16 384) on FRONTIER
 - `ant-opus / ant-fable / ant-sonnet` → MEDIUM (8 192) on REASON/CODE/AGENT; **HIGH (16 384) on FRONTIER**
 - `ant-haiku` excluded (no extended thinking support)
 - **BOOST escalation:** `[BOOST]` tag · `/boost` command · autodetect ("redo"/"shallow"/"wrong") → forces HIGH across all thinking models
@@ -35,7 +35,7 @@ round-0 answer costs ~1 round). Key properties, all validated live:
 - Robust reasoning-model parsing (last-block) + draft-fallback (never returns empty).
 - `fusion/conductor.py`; receipt shows the `search_path`. 36 tests pass.
 
-**Benchmark:** SUPPORTED vs cop-opus (n=4) — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+**Benchmark:** SUPPORTED vs co-opus (n=4) — see [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 **Phase 2 v2.1.1 (Multi-LLM AB-MCTS — BUILT):** `[NOVEL TREE]` / `[NOVEL TREE DEEP]` runs the
 faithful Sakana algorithm (arXiv 2503.04412, AB-MCTS-A + Multi-LLM): Thompson sampling over an
@@ -52,11 +52,11 @@ throttled paid arms and shifted to healthy NIM mid-search. 58 tests pass.
 
 **Pending / next:**
 - Restore `copilot: available: true` in `availability.yaml` when monthly credits reset.
-- **Frontier baseline bench** (ant-fable + HIGH thinking vs cop-opus vs nim-glm-thinking on hard prompts) — held until explicitly triggered. Will validate whether the adaptive thinking depth feature + Anthropic Max produces frontier-grade results at flat-rate cost.
+- **Frontier baseline bench** (ant-fable + HIGH thinking vs co-opus vs nim-glm-thinking on hard prompts) — held until explicitly triggered. Will validate whether the adaptive thinking depth feature + Anthropic Max produces frontier-grade results at flat-rate cost.
 - **Phase 2 v2.2 — fusion conductor upgrade** (planned, not yet implemented):
   See [docs/fusion-conductor-v2.2-design.md](docs/fusion-conductor-v2.2-design.md) for full design.
   Summary: rework conductor selection to be thinking-aware; fable as auditor; opus as tool-capable conductor.
-- **v3 — multi-agent worker swarm** (planned): orchestrator (ant-fable / ant-opus / zen-glm 5.2)
+- **v3 — multi-agent worker swarm** (planned): orchestrator (ant-fable / ant-opus / go-glm 5.2)
   decomposes task, dispatches parallel workers (ant-sonnet / ant-haiku / healthy NIM).
   Requires CrewAI / LangGraph or bespoke async harness on top of the existing router.
 
@@ -81,7 +81,7 @@ Resending history every turn is inherent to stateless chat APIs — **no client 
    of turns land on a different model. Every switch is a cold cache and a full re-tokenisation.
    Pinning a conversation to its model unless the tier genuinely changes is the single biggest
    lever. Cost caveat: most traffic is free-tier, so the win there is **latency and context
-   headroom**; the money win lands on the flat/paid lanes (`ant-*`, `zai-*`, `zen-paid-*`).
+   headroom**; the money win lands on the flat/paid lanes (`ant-*`, `zai-*`, `zen-*`).
 2. **Prompt caching** — no `cache_control` is sent anywhere today, so cache-read pricing (~10×
    cheaper on Anthropic/z.ai) is unused. Only useful once (1) exists, since switching invalidates.
 3. **Configure DCP** — `~/.config/opencode/dcp.jsonc` contains only a schema reference, so the

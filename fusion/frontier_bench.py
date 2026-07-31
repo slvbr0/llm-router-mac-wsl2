@@ -58,8 +58,8 @@ JUDGE_RE = re.compile(r'\{[^{}]*"a"\s*:\s*(\d+)[^{}]*"b"\s*:\s*(\d+)[^{}]*\}')
 # The judge is the measuring instrument, so its config must not depend on what it is measuring.
 # Left to auto-classification, a judge prompt wrapping two long technical answers lands on REASON,
 # and the router then injects a thinking budget for any thinking-capable judge. That is how the
-# 2026-07-10 run lost its second judge: zen-glm rejects the router's thinking params outright
-# (400 "Unsupported parameter(s)"), so every zen-glm judge call failed and was silently dropped
+# 2026-07-10 run lost its second judge: go-glm rejects the router's thinking params outright
+# (400 "Unsupported parameter(s)"), so every go-glm judge call failed and was silently dropped
 # from the mean, collapsing a two-judge bias control down to the baseline's own family judge.
 #
 # A judge emits a two-integer JSON verdict. Extended thinking buys little there and costs a hard
@@ -130,14 +130,14 @@ def blind_judge(task, fusion_ans, base_ans, judge_alias, key, rng, log=None):
     return (s2, s1) if swap else (s1, s2)   # -> (fusion_score, baseline_score)
 
 
-def list_cost(entries, prices, ceiling_alias="zen-glm"):
+def list_cost(entries, prices, ceiling_alias="go-glm"):
     """USD at public API list rates. Returns (usd, unpriced_tokens, unpriced_aliases).
 
     `usd` is the POINT ESTIMATE: unpriced aliases are billed at `ceiling_alias`'s rate.
 
     This is NOT a bound, and an earlier version of this docstring wrongly claimed it was. The
-    unpriced aliases are not uniformly cheaper than GLM 5.2: zen-qwen-max lists at ~$6.40/1M
-    output, above GLM's $4.40, while nim-deepseek is free and zen-deepseek lists far below.
+    unpriced aliases are not uniformly cheaper than GLM 5.2: go-qwen-max lists at ~$6.40/1M
+    output, above GLM's $4.40, while nim-deepseek is free and go-deepseek lists far below.
     The error runs in both directions, so use lo/hi from `cost_bounds()` for any claim about
     which arm is cheaper. On the 2026-07-10 bench, 33% of arm B's tokens were unpriced -- a
     third of the bill was an assumption, on the very number the benchmark exists to measure.
@@ -158,7 +158,7 @@ def list_cost(entries, prices, ceiling_alias="zen-glm"):
     return usd, unpriced_tok, sorted(unpriced)
 
 
-def cost_bounds(entries, prices, ceiling_alias="zen-glm"):
+def cost_bounds(entries, prices, ceiling_alias="go-glm"):
     """(lo, hi) USD. Priced aliases bill at their real rate in both. Unpriced aliases bill at
     $0 in `lo` and at the priciest PRICED alias's rate in `hi`.
 
@@ -168,7 +168,7 @@ def cost_bounds(entries, prices, ceiling_alias="zen-glm"):
     numbers turn out to be.
 
     `hi` is only indicative, not a strict upper bound: it bills unpriced aliases at the priciest
-    commodity rate we hold (GLM 5.2, $4.40/1M out), and zen-qwen-max actually lists above that.
+    commodity rate we hold (GLM 5.2, $4.40/1M out), and go-qwen-max actually lists above that.
     Never rest a "fusion is expensive" claim on `hi`; rest a "fusion is not cheaper" claim on `lo`."""
     hi_in, hi_out = max(prices.values(), key=lambda p: p[1]) if prices else (0.0, 0.0)
     cl_in, cl_out = prices.get(ceiling_alias, (hi_in, hi_out))
@@ -403,7 +403,7 @@ def report(out, log):
                 "cheaper; do not claim it has.")
     if out["unpriced_tokens"]:
         log(f"\n{out['unpriced_tokens']} fusion tokens had no published price. The point estimate "
-            f"above bills them at GLM 5.2 rates, which is NOT a bound (zen-qwen-max lists above "
+            f"above bills them at GLM 5.2 rates, which is NOT a bound (go-qwen-max lists above "
             f"it): {', '.join(out['unpriced_aliases'])}")
     log("Marginal cost was ~$0 on every arm (free NIM / GO subscription / Anthropic Max). "
         "'list $' is the counterfactual public-API price, thinking tokens billed as output.")

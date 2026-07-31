@@ -41,8 +41,8 @@ never disrupts them. No launchd services needed for Phase 1 — containers use
 | Alias prefix | Backend | Auth | Billing | Role |
 |---|---|---|---|---|
 | `nim-*` (11) | NVIDIA NIM | `NVIDIA_API_KEY` | free (load-variable) | workhorse, default GLM 5.2 |
-| `zen-*` / `zen-free-*` | opencode Zen | `ZEN_API_KEY` | per-1M-tokens (free tier = $0) | conserve; cheap fallback |
-| `cop-*` | GitHub Copilot | OAuth device flow | per-request credit | frontier last resort |
+| `zen-*` / `free-*` | opencode Zen | `ZEN_API_KEY` | per-1M-tokens (free tier = $0) | conserve; cheap fallback |
+| `co-*` | GitHub Copilot | OAuth device flow | per-request credit | frontier last resort |
 
 NIM model IDs verified live against `integrate.api.nvidia.com` 2026-07-06 (no drift).
 Aliases are **stable**; only `auto` is special (rewritten per request by the hook).
@@ -51,7 +51,7 @@ Aliases are **stable**; only `auto` is special (rewritten per request by the hoo
 `gpt-5.3-codex`) exist in Copilot's `/models` but **fail through litellm's Copilot
 path** (they need Copilot's `/responses` API, which litellm's `github_copilot`
 provider doesn't call). **Claude (opus/sonnet/haiku) and Gemini work.** So
-`cop-gpt`/`cop-codex`/`cop-mini` are defined but dropped from active tiers; use
+`co-gpt`/`co-codex`/`co-mini` are defined but dropped from active tiers; use
 `zen-gpt` (Zen's GPT-5.5) when a GPT model is wanted.
 
 ---
@@ -104,8 +104,8 @@ thing the router can't assume. The audit measures it; the router consumes it.
   six worked examples teaching terseness that caveman + AGENTS.md already enforce. The
   **Tool usage / Following conventions / Code References** sections were deliberately KEPT:
   this router sends most traffic to weak free models, which are exactly the ones that stop
-  calling tools correctly without them (verified: nim-llama, nim-step, zen-free-deepseek,
-  zen-free-north all still emit valid `tool_calls` on the lean prompt). Detail +
+  calling tools correctly without them (verified: nim-llama, nim-step, free-deepseek,
+  free-north all still emit valid `tool_calls` on the lean prompt). Detail +
   rollback: `~/.config/opencode/prompts/README.md`.
 
 ### Client: use the opencode TUI, not the desktop app
@@ -151,10 +151,10 @@ opencode.ai dashboard.
 
 ## 8. Gotchas discovered (keep for troubleshooting)
 
-- **litellm blocks startup on Copilot device-flow.** With `cop-*` models in the config
+- **litellm blocks startup on Copilot device-flow.** With `co-*` models in the config
   and no token, litellm's `github_copilot` authenticator runs its own device flow and
   stalls startup. Fix: provide a token (`scripts/copilot_device_flow.sh`) — then
-  **restart litellm** so it re-initialises the `cop-*` deployments it dropped on the
+  **restart litellm** so it re-initialises the `co-*` deployments it dropped on the
   first (tokenless) boot.
 - **opencode's stored Copilot token ≠ litellm's.** opencode's `github-copilot` OAuth
   token fails litellm's exchange (`404 copilot_internal/v2/token`) — different OAuth
@@ -205,8 +205,8 @@ Built as an **MCP tool + CLI** (not the sidecar the original sketched): `fusion/
   `fusion/abmcts.py`, `fusion/bandit.py`, `fusion/reward.py`; config: `abmcts:` in `fusion.yaml`.
 - **Philosophy**: fusion optimizes **cost/quality, not speed** — minutes to save 10–100× is fine.
 - **Bench**: `python3 fusion/fusion_bench.py fusion/prompts.bench4.txt --conduct`. **Verdict
-  (n=4): SUPPORTED** — fusion 8.50 vs cop-opus 6.50 quality, half the cost, 11× faster
-  (`logs/bench4-conduct-final-194009.txt`). Gotcha: the `cop-opus` baseline hides extended
+  (n=4): SUPPORTED** — fusion 8.50 vs co-opus 6.50 quality, half the cost, 11× faster
+  (`logs/bench4-conduct-final-194009.txt`). Gotcha: the `co-opus` baseline hides extended
   thinking that eats the token cap — a 1500-tok cap returned *empty* answers; needs 6000 tok +
   1200s (wait it out, never truncate mid-think). Fusion lost the pure-code prompt (7 vs 9).
 

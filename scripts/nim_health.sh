@@ -27,9 +27,9 @@ OUT="model_health.yaml"
 #   - Anthropic OAuth (ant-*) / Copilot: not probed; if the OAuth/credits work, the models work.
 # Unprobed models fail-open (assumed healthy, keep config order) in priority_router.py.
 NIM_ALIASES="nim-glm nim-deepseek nim-deepseek-flash nim-inkling nim-gptoss nim-minimax nim-nemotron nim-nemotron-super nim-step nim-llama"
-MIST_ALIASES="mist-large mist-codestral mist-medium mist-magistral"     # Mistral free tier
-ZEN_FREE_ALIASES="zen-free-deepseek zen-free-nemotron zen-free-pickle zen-free-ling zen-free-laguna zen-free-mimo zen-free-north"
-ALL_ALIASES="$NIM_ALIASES $MIST_ALIASES $ZEN_FREE_ALIASES"
+MIS_ALIASES="mis-large mis-codestral mis-medium mis-magistral"     # Mistral free tier
+FREE_ALIASES="free-deepseek free-nemotron free-pickle free-ling free-laguna free-mimo free-north"
+ALL_ALIASES="$NIM_ALIASES $MIS_ALIASES $FREE_ALIASES"
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

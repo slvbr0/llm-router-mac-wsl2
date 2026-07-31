@@ -9,7 +9,7 @@ req() { echo "=== $1 ==="; curl -s -m 40 "$URL" -H "Authorization: Bearer $KEY" 
 req "auto short (cheap -> nim-llama)" '{"model":"auto","messages":[{"role":"user","content":"Say hello"}]}'
 req "auto [THINK] (reason -> free reasoner)" '{"model":"auto","messages":[{"role":"user","content":"[THINK] prove sqrt2 irrational"}]}'
 req "auto code (code -> nim-deepseek)" '{"model":"auto","messages":[{"role":"user","content":"debug:\n```python\nprint(1)\n```"}]}'
-req "auto [FRONTIER] (-> cop-opus)" '{"model":"auto","messages":[{"role":"user","content":"[FRONTIER] hard design question"}]}'
+req "auto [FRONTIER] (-> co-opus)" '{"model":"auto","messages":[{"role":"user","content":"[FRONTIER] hard design question"}]}'
 req "auto [UNAVAILABLE: nim] short (-> zen free)" '{"model":"auto","messages":[{"role":"user","content":"[UNAVAILABLE: nim] say ok"}]}'
 echo "=== PriorityRouter log lines ==="
 docker compose logs --since 5m litellm 2>&1 | grep -i PriorityRouter | tail -10 || true

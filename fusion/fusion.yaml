@@ -1,6 +1,6 @@
 # Fusion v2.0 config — panels are provider-diverse (MoA's edge) and tunable here.
-# Practicality rule: default panels use FAST-capable models (incl. paid cop-haiku);
-# slow reasoning heavyweights (cop-sonnet/zen-gpt/qwen-max/deepseek) live in `deep`,
+# Practicality rule: default panels use FAST-capable models (incl. paid co-haiku);
+# slow reasoning heavyweights (co-sonnet/zen-gpt/qwen-max/deepseek) live in `deep`,
 # reached only via [NOVEL DEEP] when you want max quality and will wait.
 # Panels = free pool + paid pool + target size + paid_anchor. build_panel() checks NIM
 # health first, then MIXES: `paid_anchor` paid models are always included (quality/diversity),
@@ -12,26 +12,26 @@ panels:
   # by latency; fusion tolerates "decent" (not just "fast") responders. Interactive Phase-1
   # routing stays fast; fusion does not.
   easy:                                        # short/simple — free-only (cheapest); paid only backfills
-    free: [nim-inkling, zen-free-deepseek, zen-deepseek-flash, nim-llama, nim-gptoss]
-    paid: [cop-haiku]
+    free: [nim-inkling, free-deepseek, go-deepseek-flash, nim-llama, nim-gptoss]
+    paid: [co-haiku]
     size: 3
     paid_anchor: 0
-    aggregator: [nim-inkling, nim-llama, cop-haiku]
+    aggregator: [nim-inkling, nim-llama, co-haiku]
     timeout_s: 60
   hard:                                        # default code/reason/agent — mostly free + 1 paid anchor
-    free: [nim-inkling, zen-glm, zen-kimi, nim-deepseek, nim-gptoss, zen-free-deepseek, nim-step]
-    paid: [cop-haiku, cop-sonnet]
+    free: [nim-inkling, go-glm, go-kimi, nim-deepseek, nim-gptoss, free-deepseek, nim-step]
+    paid: [co-haiku, co-sonnet]
     size: 4
     paid_anchor: 1
-    aggregator: [zen-glm, nim-nemotron, nim-inkling, cop-sonnet]
+    aggregator: [go-glm, nim-nemotron, nim-inkling, co-sonnet]
     timeout_s: 120                             # capable reasoning models allowed to take their time
   deep:                                        # [NOVEL DEEP] — heavyweight, 2 paid anchors, max quality
-    free: [zen-glm, zen-qwen-max, zen-deepseek, nim-nemotron-super, nim-deepseek, nim-nemotron, nim-inkling]
-    paid: [cop-opus, cop-sonnet]        # zen-gpt dropped: credits lane 401s on every call
+    free: [go-glm, go-qwen-max, go-deepseek, nim-nemotron-super, nim-deepseek, nim-nemotron, nim-inkling]
+    paid: [co-opus, co-sonnet]        # zen-gpt dropped: credits lane 401s on every call
     size: 5
     paid_anchor: 2
-    aggregator: [zen-glm, cop-opus, nim-nemotron, nim-inkling]
-    timeout_s: 300                             # frontier reasoning (cop-opus ~205s) — let it finish
+    aggregator: [go-glm, co-opus, nim-nemotron, nim-inkling]
+    timeout_s: 300                             # frontier reasoning (co-opus ~205s) — let it finish
 research:
   council_models: "gpt54,claude_sonnet,gemini_pro"        # pwm council -m
   chairman: sonar
@@ -43,7 +43,7 @@ cost:                               # receipt estimation
   zen_paid_usd_per_1m: 3.0
   copilot_usd_per_credit: 0.04
   zen_paid_aliases: [zen-gpt]     # per-token credits lane only
-  zen_go_aliases: [zen-glm, zen-deepseek, zen-kimi, zen-minimax, zen-qwen-max, zen-mimo, zen-deepseek-flash]  # GO subscription: flat-rate, $0 marginal
+  zen_go_aliases: [go-glm, go-deepseek, go-kimi, go-minimax, go-qwen-max, go-mimo, go-deepseek-flash]  # GO subscription: flat-rate, $0 marginal
   # LIST PRICE, usd per 1M tokens [input, output]. NOT what we pay — NIM is free, GO and
   # Anthropic Max are flat-rate subscriptions, so our marginal cost is ~$0 on every arm.
   # This table answers the only question a reader cares about: what would this have cost at
@@ -55,36 +55,36 @@ cost:                               # receipt estimation
     ant-opus:    [5.0,  25.0]
     ant-sonnet:  [3.0,  15.0]
     ant-haiku:   [1.0,   5.0]
-    zen-glm:     [1.40,  4.40]
+    go-glm:     [1.40,  4.40]
     nim-glm:     [1.40,  4.40]
-    zen-kimi:    [0.95,  4.00]
+    go-kimi:    [0.95,  4.00]
     nim-kimi:    [0.95,  4.00]
-    zen-minimax: [0.30,  1.20]
+    go-minimax: [0.30,  1.20]
     nim-minimax: [0.30,  1.20]
 bench:
   baseline: ant-fable   # frontier reference: Fable 5 + HIGH thinking. (copilot credits exhausted
-                        # until the 2026-08-01 monthly reset; cop-* return 200 with EMPTY content,
+                        # until the 2026-08-01 monthly reset; co-* return 200 with EMPTY content,
                         # so "it answered" is not "it worked". Masked in availability.yaml.)
   judge: ant-haiku      # outside both arms. Shares a family with the baseline, so any bias runs
                         # TOWARD fable and AGAINST the fusion hypothesis — a conservative judge.
-  judge_b: zen-glm      # second opinion; disagreement gets reported, not discarded
+  judge_b: go-glm      # second opinion; disagreement gets reported, not discarded
 conductor:
   enabled: true                # [NOVEL] uses the conductor loop by default (self-limits by score)
   # Conductor = capable orchestrator, chosen DYNAMICALLY (pick_conductor): fastest HEALTHY NIM
   # candidate by measured latency; else a capable opencode-go (Zen) model like GLM 5.2; else
   # Copilot. Lists below are the *capable candidate pool* per difficulty (NIM first, then paid).
   models:
-    easy: [nim-inkling, nim-glm, nim-gptoss, zen-deepseek-flash, zen-glm]
-    hard: [nim-glm, nim-nemotron, nim-deepseek, nim-inkling, zen-glm, zen-qwen-max, cop-sonnet]
-    deep: [nim-nemotron-super, nim-glm, nim-deepseek, nim-nemotron, zen-glm, zen-qwen-max, cop-opus]
+    easy: [nim-inkling, nim-glm, nim-gptoss, go-deepseek-flash, go-glm]
+    hard: [nim-glm, nim-nemotron, nim-deepseek, nim-inkling, go-glm, go-qwen-max, co-sonnet]
+    deep: [nim-nemotron-super, nim-glm, nim-deepseek, nim-nemotron, go-glm, go-qwen-max, co-opus]
   score_threshold: 8           # stop once best score >= this
   max_rounds: 3                # candidate evaluations beyond round 0 (cost cap)
   improve_epsilon: 1           # score gain that counts as "improved" -> keep deepening
   refine_max_tokens: 4000      # reasoning models need room to think AND still emit the format
-  timeout_s: 300               # conductor is a capable (slow) model — cop-opus ~205s; let it finish
+  timeout_s: 300               # conductor is a capable (slow) model — co-opus ~205s; let it finish
 abmcts:                             # v2.1.1 [NOVEL TREE] — Multi-LLM AB-MCTS
   budget: {easy: 6, hard: 12, deep: 20}   # node generations per call
-  judge: [zen-glm, cop-haiku, nim-inkling] # pairwise FALLBACK CHAIN; zen-glm first (GO flat-rate, reliable)
+  judge: [go-glm, co-haiku, nim-inkling] # pairwise FALLBACK CHAIN; go-glm first (GO flat-rate, reliable)
   judge_timeout_s: 120
   judge_max_tokens: 300
   gen_max_tokens: 4000
@@ -102,6 +102,6 @@ abmcts:                             # v2.1.1 [NOVEL TREE] — Multi-LLM AB-MCTS
     # aliases skip health gating in build_pool, so a dead one is never filtered out — and a
     # `frontier` prior makes the bandit's optimistic prior pull it FIRST, burning generation
     # steps on an arm that cannot answer. Re-add once a probe with fallbacks off serves itself.
-    frontier: [ant-opus, ant-sonnet, cop-opus, cop-sonnet, cop-gemini]
-    strong:   [zen-glm, zen-qwen-max, zen-kimi, zen-deepseek, zen-minimax, nim-nemotron, nim-glm, nim-deepseek, nim-nemotron-super]
-    base:     [nim-inkling, nim-minimax, nim-nemotron, zen-free-deepseek, zen-deepseek-flash, zen-mimo, nim-gptoss, nim-llama]
+    frontier: [ant-opus, ant-sonnet, co-opus, co-sonnet, co-gemini]
+    strong:   [go-glm, go-qwen-max, go-kimi, go-deepseek, go-minimax, nim-nemotron, nim-glm, nim-deepseek, nim-nemotron-super]
+    base:     [nim-inkling, nim-minimax, nim-nemotron, free-deepseek, go-deepseek-flash, go-mimo, nim-gptoss, nim-llama]

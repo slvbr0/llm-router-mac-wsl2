@@ -14,7 +14,7 @@ providers:
     note: "NVIDIA NIM — free workhorse; load-variable, so latency-gated by model_health.yaml"
   mistral:
     available: true
-    note: "Mistral free tier — mist-* aliases (api.mistral.ai)"
+    note: "Mistral free tier — mis-* aliases (api.mistral.ai)"
   zen:
     available: true
     note: "opencode Zen — GO flat-rate (class 1) + free tier ($0) + per-token paid backstop (class 4)"

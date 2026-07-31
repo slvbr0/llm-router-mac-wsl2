@@ -17,7 +17,7 @@ def test_node_posterior_updates():
 
 def test_backprop_reaches_ancestors():
     root = ab.Node(0, parent=None, answer=None, alias=None)
-    child = ab.Node(1, parent=root, answer="a", alias="zen-glm")
+    child = ab.Node(1, parent=root, answer="a", alias="go-glm")
     root.children.append(child)
     leaf = ab.Node(2, parent=child, answer="b", alias="nim-glm")
     child.children.append(leaf)
@@ -29,7 +29,7 @@ def test_backprop_reaches_ancestors():
 def test_select_descends_into_strong_child():
     random.seed(3)
     root = ab.Node(0, parent=None, answer=None, alias=None)
-    strong = ab.Node(1, parent=root, answer="s", alias="zen-glm")
+    strong = ab.Node(1, parent=root, answer="s", alias="go-glm")
     root.children.append(strong)
     for _ in range(8):
         ab.backprop(strong, 0.95)                     # strong child, tight posterior
@@ -76,7 +76,7 @@ def _patch_env(monkeypatch):
 def test_conduct_abmcts_returns_best_and_receipt(monkeypatch):
     random.seed(11)
     _patch_env(monkeypatch)
-    stub = _gen_stub({"zen-glm": "a strong answer"})
+    stub = _gen_stub({"go-glm": "a strong answer"})
     monkeypatch.setattr(ab, "call_model", stub)
     import fusion.reward as rw
     monkeypatch.setattr(rw, "call_model", stub)
@@ -129,7 +129,7 @@ def test_tree_cost_includes_pairwise_judge_calls(monkeypatch):
     it actually ties on price with."""
     random.seed(11)
     _patch_env(monkeypatch)
-    stub = _gen_stub({"zen-glm": "a strong answer"})
+    stub = _gen_stub({"go-glm": "a strong answer"})
     monkeypatch.setattr(ab, "call_model", stub)     # generate() binds call_model in abmcts
     monkeypatch.setattr(rw, "call_model", stub)     # judge_pairwise binds it in reward
     res = ab.conduct_abmcts("[NOVEL TREE] design a thing")

@@ -22,7 +22,7 @@ def judge_pairwise(task, challenger, incumbent, cfg, key, sink=None):
     """Blind A/B: returns True if challenger wins, False if it loses, None if unjudgeable.
     Random order so the judge can't position-bias. `judge` config may be a fallback LIST —
     a single judge is a single point of failure that blinds the whole search (live smoke:
-    cop-haiku throttled -> every rating stuck at 0.5). Retry each judge once (spec §4.3).
+    co-haiku throttled -> every rating stuck at 0.5). Retry each judge once (spec §4.3).
 
     `sink`: every judge call is appended here, including failed attempts and retries. The search
     cannot be costed from its generations alone — it spends one pairwise judge per challenger,

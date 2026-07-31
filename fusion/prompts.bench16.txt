@@ -1,0 +1,17 @@
+# bench16 = bench4 + bench12, deduped. n=16 -> 32 judge-prompt pairs per arm.
+# n=4 gave fusion 3 wins / 4 losses / 1 tie vs ant-fable: indistinguishable from a coin flip.
+Prove or disprove: every bounded monotone sequence of real numbers converges. Explain rigorously but concisely.
+Design a rate limiter for a distributed API gateway: compare token bucket vs sliding window log, pick one, justify, and sketch the data model.
+Implement an LRU cache with TTL in Python without using functools; include complexity analysis.
+Explain how a Mixture-of-Agents system can outperform its strongest member, and when it cannot.
+Implement an LRU cache with TTL in Python without functools; include Big-O per operation.
+Write a thread-safe bounded blocking queue in Python (no queue.Queue); explain the invariants.
+Implement Dijkstra's shortest path in Python with a binary heap; state complexity and edge cases.
+Debug and fix: a Python asyncio producer/consumer that deadlocks under backpressure. Show corrected code.
+Prove or disprove: every bounded monotone sequence of real numbers converges. Rigorous but concise.
+Prove the halting problem is undecidable. Keep it self-contained and precise.
+Given 3 six-sided dice, what is the probability the sum is at least 15? Show the counting.
+Design a rate limiter for a distributed API gateway: token bucket vs sliding window log, pick one, justify, sketch the data model.
+Design an idempotency layer for a payments API so retried requests never double-charge. Cover storage and edge cases.
+Design a URL shortener that scales to 1B links: key generation, storage, cache, collision handling.
+Explain the CAP theorem and why "CA" systems are effectively a myth in real distributed systems.

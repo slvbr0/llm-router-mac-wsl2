@@ -24,7 +24,7 @@ model_list:
     litellm_params: {model: openai/nvidia/nemotron-3-super-120b-a12b, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   # nim-mistral removed 2026-07-29: mistral-large-3 delisted (HTTP 410). The remaining NIM mistral
   # builds are either not provisioned for this account (404) or >90s (mistral-medium-3.5-128b).
-  # Mistral proper is still available via the mist-* aliases on api.mistral.ai.
+  # Mistral proper is still available via the mis-* aliases on api.mistral.ai.
   - model_name: nim-llama
     litellm_params: {model: openai/meta/llama-3.3-70b-instruct, api_base: https://integrate.api.nvidia.com/v1, api_key: os.environ/NVIDIA_API_KEY}
   - model_name: nim-step
@@ -33,13 +33,13 @@ model_list:
   # ===== Mistral free tier (LiteLLM native mistral/ -> api.mistral.ai/v1) =====
   # Capable models only (per policy: no ministral/tiny/nemo). large+codestral = non-reasoning;
   # medium+magistral = reason natively (no param — magistral reasons inline). Cost class 0 (free).
-  - model_name: mist-large
+  - model_name: mis-large
     litellm_params: {model: mistral/mistral-large-latest, api_key: os.environ/MISTRAL_API_KEY}
-  - model_name: mist-codestral
+  - model_name: mis-codestral
     litellm_params: {model: mistral/codestral-latest, api_key: os.environ/MISTRAL_API_KEY}
-  - model_name: mist-medium
+  - model_name: mis-medium
     litellm_params: {model: mistral/mistral-medium-latest, api_key: os.environ/MISTRAL_API_KEY}
-  - model_name: mist-magistral
+  - model_name: mis-magistral
     litellm_params: {model: mistral/magistral-small-latest, api_key: os.environ/MISTRAL_API_KEY}
 
   # ===== z.ai GLM Coding Plan (flat-rate) — Anthropic-compat endpoint ONLY =====
@@ -60,7 +60,7 @@ model_list:
   # The subscription serves GPT ONLY through chatgpt.com/backend-api/codex/responses (Responses
   # API, stream-only). api.openai.com 401s (missing scope) / 429s (no PAYG balance), so the local
   # proxy on :4042 translates chat/completions <-> Responses. Cost class 3 — SHARES the flat band
-  # with Anthropic Max (both sunk-cost subs; latency decides between them). Fills a real gap: zen-gpt 401s and cop-gpt fails via LiteLLM's Copilot path,
+  # with Anthropic Max (both sunk-cost subs; latency decides between them). Fills a real gap: zen-gpt 401s and co-gpt fails via LiteLLM's Copilot path,
   # so this is the only working GPT lane. Tool-calling verified live.
   - model_name: cod-mini
     litellm_params: {model: openai/gpt-5.4-mini, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}   # ~1.1s, smallest quota burn, tool-capable
@@ -80,9 +80,9 @@ model_list:
     litellm_params: {model: openai/claude-fable-5, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
   - model_name: zen-opus
     litellm_params: {model: openai/claude-opus-4-8, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-glm
+  - model_name: go-glm
     litellm_params: {model: openai/glm-5.2, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-deepseek
+  - model_name: go-deepseek
     litellm_params: {model: openai/deepseek-v4-pro, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   # ===== opencode GO subscription (flat-rate plan, /zen/go/v1 — NOT per-token credits) =====
   # Added 2026-07-30, ranked by GO quota (requests per 5h — higher = cheaper to spend):
@@ -90,78 +90,78 @@ model_list:
   #   · deepseek-v4-pro 3,450 · mimo-v2.5-pro 3,250 · minimax-m3 3,200 · gpt-5.6-luna 2,050
   #   · kimi-k2.7-code 1,350 · qwen3.7-max 950 · glm-5.2 880 · grok-4.5 120 · kimi-k3 110
   # Skipped as dominated: minimax-m2.7, qwen3.6-plus, kimi-k2.6, glm-5.1.
-  - model_name: zen-mimo-lite
+  - model_name: go-mimo-lite
     litellm_params: {model: openai/mimo-v2.5, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}   # 30,100/5h — the most generous capable GO model
-  - model_name: zen-hy3
+  - model_name: go-hy3
     litellm_params: {model: openai/hy3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}         # 4,300/5h — replaces the retired hy3-free
-  - model_name: zen-luna
+  - model_name: go-luna
     litellm_params: {model: openai/gpt-5.6-luna, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY} # 2,050/5h — same model as cod-luna but GO flat = cost class 1, so preferred
-  - model_name: zen-minimax27
+  - model_name: go-minimax27
     litellm_params: {model: openai/minimax-m2.7, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}  # 3,400/5h
-  - model_name: zen-qwen36
+  - model_name: go-qwen36
     litellm_params: {model: openai/qwen3.6-plus, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}  # 3,300/5h — reasoner
-  - model_name: zen-kimi26
+  - model_name: go-kimi26
     litellm_params: {model: openai/kimi-k2.6, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}     # 1,150/5h — reasoner
-  - model_name: zen-glm51
+  - model_name: go-glm51
     litellm_params: {model: openai/glm-5.1, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}       # 880/5h — reasoner
-  - model_name: zen-kimi
+  - model_name: go-kimi
     litellm_params: {model: openai/kimi-k2.7-code, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-minimax
+  - model_name: go-minimax
     litellm_params: {model: openai/minimax-m3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-qwen-max
+  - model_name: go-qwen-max
     litellm_params: {model: openai/qwen3.7-max, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-qwen-plus
+  - model_name: go-qwen-plus
     litellm_params: {model: openai/qwen3.7-plus, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-mimo
+  - model_name: go-mimo
     litellm_params: {model: openai/mimo-v2.5-pro, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-deepseek-flash
+  - model_name: go-deepseek-flash
     litellm_params: {model: openai/deepseek-v4-flash, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   # ===== Top-layer brains (GO flat-rate, LOW quota — orchestrator/auditor only) =====
   # grok-4.5 (~80/5h) and kimi-k3 (~140/5h) are near-frontier quality but tiny quota, so they
   # live in the ORCHESTRATOR tier (fusion conductor / auditor / committee anchor), never everyday
-  # auto-routing. On a 429 the router's fallback chain drops to ant-opus/zen-glm (see tier order).
-  - model_name: zen-grok
+  # auto-routing. On a 429 the router's fallback chain drops to ant-opus/go-glm (see tier order).
+  - model_name: go-grok
     litellm_params: {model: openai/grok-4.5, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-kimi-k3
+  - model_name: go-kimi-k3
     litellm_params: {model: openai/kimi-k3, api_base: https://opencode.ai/zen/go/v1, api_key: os.environ/ZEN_API_KEY}
   # ===== Zen PAID per-token overflow ($20 balance, /zen/v1 + ZEN_PAID_API_KEY) =====
   # Used ONLY when GO flat-rate is exhausted (fallback) or on [BOOST] escalation. NOT in the
   # health audit (probing would spend the balance) and NOT in default tiers. Cost class 2
   # (per-token) sits below GO flat (class 1), so GO is always drained first.
   # cheap band ($/1M out): minimax 1.20, qwen-plus 1.60, glm 4.40
-  - model_name: zen-paid-minimax
+  - model_name: zen-minimax
     litellm_params: {model: openai/minimax-m3, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-qwen-plus
+  - model_name: zen-qwen-plus
     litellm_params: {model: openai/qwen3.7-plus, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-glm
+  - model_name: zen-glm
     litellm_params: {model: openai/glm-5.2, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
   # premium band (boost/drift only) ($/1M out): luna 6, grok 6, qwen-max 7.50, kimi3 15, terra 15, sol 30
-  - model_name: zen-paid-luna
+  - model_name: zen-luna
     litellm_params: {model: openai/gpt-5.6-luna, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-grok
+  - model_name: zen-grok
     litellm_params: {model: openai/grok-4.5, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-qwen-max
+  - model_name: zen-qwen-max
     litellm_params: {model: openai/qwen3.7-max, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-kimi3
+  - model_name: zen-kimi3
     litellm_params: {model: openai/kimi-k3, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-terra
+  - model_name: zen-terra
     litellm_params: {model: openai/gpt-5.6-terra, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
-  - model_name: zen-paid-sol
+  - model_name: zen-sol
     litellm_params: {model: openai/gpt-5.6-sol, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_PAID_API_KEY}
   # Zen FREE-tier (zero-cost fallback capacity)
-  - model_name: zen-free-nemotron
+  - model_name: free-nemotron
     litellm_params: {model: openai/nemotron-3-ultra-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-deepseek
+  - model_name: free-deepseek
     litellm_params: {model: openai/deepseek-v4-flash-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-pickle
+  - model_name: free-pickle
     litellm_params: {model: openai/big-pickle, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-ling
+  - model_name: free-ling
     litellm_params: {model: openai/ling-3.0-flash-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-laguna
+  - model_name: free-laguna
     litellm_params: {model: openai/laguna-s-2.1-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-mimo
+  - model_name: free-mimo
     litellm_params: {model: openai/mimo-v2.5-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
-  - model_name: zen-free-north
+  - model_name: free-north
     litellm_params: {model: openai/north-mini-code-free, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}
 
   # ===== Anthropic Claude Max (OAuth; flat-rate Max subscription via Claude Code) =====
@@ -177,19 +177,19 @@ model_list:
     litellm_params: {model: anthropic/claude-fable-5, api_base: "http://host.docker.internal:4041", api_key: oauth-via-proxy}
 
   # ===== GitHub Copilot (per-request credit; frontier). Device-flow token. =====
-  - model_name: cop-opus
+  - model_name: co-opus
     litellm_params: {model: github_copilot/claude-opus-4.8}
-  - model_name: cop-sonnet
+  - model_name: co-sonnet
     litellm_params: {model: github_copilot/claude-sonnet-5}
-  - model_name: cop-gpt
+  - model_name: co-gpt
     litellm_params: {model: github_copilot/gpt-5.5}
-  - model_name: cop-codex
+  - model_name: co-codex
     litellm_params: {model: github_copilot/gpt-5.3-codex}
-  - model_name: cop-gemini
+  - model_name: co-gemini
     litellm_params: {model: github_copilot/gemini-3.1-pro-preview}
-  - model_name: cop-haiku
+  - model_name: co-haiku
     litellm_params: {model: github_copilot/claude-haiku-4.5}
-  - model_name: cop-mini
+  - model_name: co-mini
     litellm_params: {model: github_copilot/gpt-5.4-mini}
 
   # Router entry point — priority_router rewrites per request.
@@ -206,78 +206,78 @@ router_settings:
   timeout: 600                # reasoning models on huge contexts think LONG before streaming
   stream_timeout: 600         # never kill a stream mid-think (wait-it-out rule)
   # COMPLETE fallback map — EVERY model group has a chain (mid-stream failures on an
-  # unlisted group hard-error instead of falling back; learned live on zen-free-nemotron).
+  # unlisted group hard-error instead of falling back; learned live on free-nemotron).
   # Order per chain (marginal-cost cascade): free (NIM/Mistral/zen-free) -> z.ai flat -> GO flat
   # -> Anthropic Max flat -> PAID zen twin (last resort) -> copilot. Free ALWAYS before paid.
   fallbacks:
     # Mistral free -> peer Mistral -> free NIM -> z.ai flat -> GO -> copilot (cost-ordered).
-    - mist-large: [mist-medium, mist-codestral, nim-inkling, zai-turbo, zen-glm, cop-sonnet]
-    - mist-codestral: [mist-large, nim-deepseek, zai-turbo, zen-kimi, cop-sonnet]
-    - mist-medium: [mist-magistral, mist-large, nim-glm, zai-52, zen-glm, ant-sonnet]
-    - mist-magistral: [mist-medium, nim-glm, zai-52, zen-glm, ant-sonnet]
+    - mis-large: [mis-medium, mis-codestral, nim-inkling, zai-turbo, go-glm, co-sonnet]
+    - mis-codestral: [mis-large, nim-deepseek, zai-turbo, go-kimi, co-sonnet]
+    - mis-medium: [mis-magistral, mis-large, nim-glm, zai-52, go-glm, ant-sonnet]
+    - mis-magistral: [mis-medium, nim-glm, zai-52, go-glm, ant-sonnet]
     # z.ai flat -> peer z.ai -> free -> GO -> Anthropic Max -> copilot.
-    - zai-turbo: [zai-flash, mist-large, zen-glm, zen-kimi, cop-sonnet]
-    - zai-flash: [zai-turbo, mist-codestral, zen-glm, cop-sonnet]
-    - zai-52: [zai-51, mist-medium, zen-glm, zen-qwen-max, ant-sonnet, cop-opus]
-    - zai-51: [zai-52, mist-medium, zen-glm, zen-qwen-max, ant-sonnet, cop-opus]
-    - nim-glm: [nim-inkling, zen-free-nemotron, zen-glm, cop-sonnet]
-    - nim-inkling: [nim-gptoss, nim-glm, zen-free-nemotron, zen-glm, cop-sonnet]
-    - nim-gptoss: [nim-inkling, nim-glm, zen-free-nemotron, zen-glm, cop-sonnet]
-    - nim-deepseek: [nim-gptoss, nim-deepseek-flash, zen-deepseek, cop-sonnet]
-    - nim-nemotron: [nim-nemotron-super, nim-inkling, zen-qwen-max, cop-opus]
-    - nim-nemotron-super: [nim-nemotron, nim-inkling, zen-qwen-max, cop-opus]
-    - nim-minimax: [nim-glm, nim-deepseek, zen-minimax, cop-sonnet]
-    - nim-llama: [nim-deepseek-flash, zen-free-deepseek, zen-deepseek-flash, cop-haiku]
-    - nim-step: [nim-glm, nim-deepseek, zen-free-north, zen-glm, cop-sonnet]
-    - nim-deepseek-flash: [nim-llama, zen-free-deepseek, zen-deepseek-flash, cop-haiku]
-    - zen-free-nemotron: [nim-glm, nim-inkling, zen-glm, cop-sonnet]
-    - zen-free-deepseek: [nim-deepseek-flash, nim-llama, zen-deepseek-flash, cop-haiku]
-    - zen-free-pickle: [zen-free-deepseek, nim-llama, cop-haiku]
+    - zai-turbo: [zai-flash, mis-large, go-glm, go-kimi, co-sonnet]
+    - zai-flash: [zai-turbo, mis-codestral, go-glm, co-sonnet]
+    - zai-52: [zai-51, mis-medium, go-glm, go-qwen-max, ant-sonnet, co-opus]
+    - zai-51: [zai-52, mis-medium, go-glm, go-qwen-max, ant-sonnet, co-opus]
+    - nim-glm: [nim-inkling, free-nemotron, go-glm, co-sonnet]
+    - nim-inkling: [nim-gptoss, nim-glm, free-nemotron, go-glm, co-sonnet]
+    - nim-gptoss: [nim-inkling, nim-glm, free-nemotron, go-glm, co-sonnet]
+    - nim-deepseek: [nim-gptoss, nim-deepseek-flash, go-deepseek, co-sonnet]
+    - nim-nemotron: [nim-nemotron-super, nim-inkling, go-qwen-max, co-opus]
+    - nim-nemotron-super: [nim-nemotron, nim-inkling, go-qwen-max, co-opus]
+    - nim-minimax: [nim-glm, nim-deepseek, go-minimax, co-sonnet]
+    - nim-llama: [nim-deepseek-flash, free-deepseek, go-deepseek-flash, co-haiku]
+    - nim-step: [nim-glm, nim-deepseek, free-north, go-glm, co-sonnet]
+    - nim-deepseek-flash: [nim-llama, free-deepseek, go-deepseek-flash, co-haiku]
+    - free-nemotron: [nim-glm, nim-inkling, go-glm, co-sonnet]
+    - free-deepseek: [nim-deepseek-flash, nim-llama, go-deepseek-flash, co-haiku]
+    - free-pickle: [free-deepseek, nim-llama, co-haiku]
     # GO flat models overflow FREE-FIRST. A GO 429 means the whole GO plan is saturated, so other
     # GO peers are useless — skip them. Order: free NIM/Mistral -> z.ai flat -> Anthropic Max flat
     # -> PAID twin (LAST, only if every free/flat option is down) -> copilot. Paid is NEVER reached
     # before free/flat capacity (that was billing 63k-token calls at ~$0.22 each on a saturated GO).
-    - zen-glm: [nim-glm, mist-large, zai-turbo, ant-sonnet, zen-paid-glm, cop-sonnet]
-    - zen-deepseek: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, cop-sonnet]
-    - zen-deepseek-flash: [zen-free-deepseek, nim-deepseek-flash, nim-llama, zai-flash, cop-haiku]
-    - zen-kimi: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, cop-sonnet]
-    - zen-minimax: [nim-minimax, nim-glm, zai-turbo, ant-sonnet, zen-paid-minimax, cop-sonnet]
-    - zen-qwen-max: [nim-nemotron, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-max, cop-opus]
-    - zen-mimo: [nim-glm, mist-large, zai-turbo, ant-sonnet, cop-sonnet]
-    - zen-qwen-plus: [nim-inkling, nim-glm, zai-52, ant-sonnet, zen-paid-qwen-plus, cop-opus]
+    - go-glm: [nim-glm, mis-large, zai-turbo, ant-sonnet, zen-glm, co-sonnet]
+    - go-deepseek: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, co-sonnet]
+    - go-deepseek-flash: [free-deepseek, nim-deepseek-flash, nim-llama, zai-flash, co-haiku]
+    - go-kimi: [nim-deepseek, nim-glm, zai-turbo, ant-sonnet, co-sonnet]
+    - go-minimax: [nim-minimax, nim-glm, zai-turbo, ant-sonnet, zen-minimax, co-sonnet]
+    - go-qwen-max: [nim-nemotron, nim-glm, zai-52, ant-sonnet, zen-qwen-max, co-opus]
+    - go-mimo: [nim-glm, mis-large, zai-turbo, ant-sonnet, co-sonnet]
+    - go-qwen-plus: [nim-inkling, nim-glm, zai-52, ant-sonnet, zen-qwen-plus, co-opus]
     # Orchestrator brains (low quota): a 429 degrades FREE-FIRST (free reasoner) -> Anthropic Max
     # (quality flat) -> z.ai flat -> PAID twin LAST RESORT -> copilot. Previously paid was 1st/2nd
     # here — that is exactly what billed the 63k brain calls. grok/kimi-k3 skip each other (both
     # low-quota) and skip GO peers entirely (GO is saturated when the brain 429s).
-    - zen-kimi-k3: [nim-glm, mist-medium, ant-opus, ant-sonnet, zai-52, zen-paid-kimi3, cop-opus]
-    - zen-grok: [nim-glm, mist-medium, ant-opus, ant-sonnet, zai-52, zen-paid-grok, cop-opus]
+    - go-kimi-k3: [nim-glm, mis-medium, ant-opus, ant-sonnet, zai-52, zen-kimi3, co-opus]
+    - go-grok: [nim-glm, mis-medium, ant-opus, ant-sonnet, zai-52, zen-grok, co-opus]
     # PAID per-token overflow chains ($20). Cheap band degrades among themselves then Copilot;
     # premium band steps DOWN in price (sol -> terra -> luna) before leaving the paid pool.
-    - zen-paid-glm: [zen-paid-qwen-plus, zen-paid-minimax, cop-sonnet]
-    - zen-paid-minimax: [zen-paid-qwen-plus, zen-paid-glm, cop-sonnet]
-    - zen-paid-qwen-plus: [zen-paid-glm, zen-paid-minimax, cop-sonnet]
-    - zen-paid-qwen-max: [zen-paid-glm, zen-paid-qwen-plus, cop-opus]
-    - zen-paid-grok: [zen-paid-luna, zen-paid-glm, ant-opus, cop-opus]
-    - zen-paid-kimi3: [zen-paid-luna, zen-paid-glm, ant-opus, cop-opus]
-    - zen-paid-sol: [zen-paid-terra, zen-paid-luna, ant-opus, cop-opus]
-    - zen-paid-terra: [zen-paid-luna, zen-paid-glm, ant-opus, cop-opus]
-    - zen-paid-luna: [zen-paid-glm, zen-paid-qwen-plus, ant-sonnet, cop-sonnet]
+    - zen-glm: [zen-qwen-plus, zen-minimax, co-sonnet]
+    - zen-minimax: [zen-qwen-plus, zen-glm, co-sonnet]
+    - zen-qwen-plus: [zen-glm, zen-minimax, co-sonnet]
+    - zen-qwen-max: [zen-glm, zen-qwen-plus, co-opus]
+    - zen-grok: [zen-luna, zen-glm, ant-opus, co-opus]
+    - zen-kimi3: [zen-luna, zen-glm, ant-opus, co-opus]
+    - zen-sol: [zen-terra, zen-luna, ant-opus, co-opus]
+    - zen-terra: [zen-luna, zen-glm, ant-opus, co-opus]
+    - zen-luna: [zen-glm, zen-qwen-plus, ant-sonnet, co-sonnet]
     # Free native reasoners (were unlisted -> would hard-error mid-stream per the note above).
-    - zen-free-ling: [zen-free-mimo, zen-free-deepseek, nim-glm, zen-glm]
-    - zen-free-laguna: [zen-free-nemotron, zen-free-deepseek, nim-glm, zen-glm]
-    - zen-free-mimo: [zen-free-ling, zen-free-deepseek, nim-glm, zen-glm]
-    - zen-free-north: [nim-deepseek, zen-free-deepseek, zen-glm, cop-sonnet]
-    - zen-gpt: [zen-qwen-max, zen-glm, cop-opus, cop-sonnet]
-    - zen-fable: [ant-opus, ant-fable, cop-opus, zen-opus, zen-gpt, zen-qwen-max]
-    - zen-opus: [ant-opus, ant-fable, cop-opus, zen-fable, zen-gpt, zen-qwen-max]
-    - cop-opus: [ant-opus, ant-fable, cop-sonnet, cop-gemini, zen-qwen-max, zen-glm]
-    - ant-fable: [ant-opus, ant-sonnet, cop-opus, zen-fable, zen-gpt, zen-qwen-max]
-    - ant-sonnet: [ant-opus, cop-sonnet, zen-fable, zen-gpt, zen-qwen-max]
-    - ant-haiku: [ant-sonnet, cop-haiku, zen-glm, nim-inkling, zen-free-nemotron]
-    - ant-opus: [ant-fable, ant-sonnet, cop-opus, zen-fable, zen-opus, zen-gpt, zen-qwen-max]
-    - cop-sonnet: [ant-sonnet, cop-opus, cop-gemini, zen-glm]
-    - cop-gemini: [ant-sonnet, cop-sonnet, zen-glm, nim-glm]
-    - cop-haiku: [ant-haiku, zen-glm, nim-inkling, zen-free-nemotron]
+    - free-ling: [free-mimo, free-deepseek, nim-glm, go-glm]
+    - free-laguna: [free-nemotron, free-deepseek, nim-glm, go-glm]
+    - free-mimo: [free-ling, free-deepseek, nim-glm, go-glm]
+    - free-north: [nim-deepseek, free-deepseek, go-glm, co-sonnet]
+    - zen-gpt: [go-qwen-max, go-glm, co-opus, co-sonnet]
+    - zen-fable: [ant-opus, ant-fable, co-opus, zen-opus, zen-gpt, go-qwen-max]
+    - zen-opus: [ant-opus, ant-fable, co-opus, zen-fable, zen-gpt, go-qwen-max]
+    - co-opus: [ant-opus, ant-fable, co-sonnet, co-gemini, go-qwen-max, go-glm]
+    - ant-fable: [ant-opus, ant-sonnet, co-opus, zen-fable, zen-gpt, go-qwen-max]
+    - ant-sonnet: [ant-opus, co-sonnet, zen-fable, zen-gpt, go-qwen-max]
+    - ant-haiku: [ant-sonnet, co-haiku, go-glm, nim-inkling, free-nemotron]
+    - ant-opus: [ant-fable, ant-sonnet, co-opus, zen-fable, zen-opus, zen-gpt, go-qwen-max]
+    - co-sonnet: [ant-sonnet, co-opus, co-gemini, go-glm]
+    - co-gemini: [ant-sonnet, co-sonnet, go-glm, nim-glm]
+    - co-haiku: [ant-haiku, go-glm, nim-inkling, free-nemotron]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

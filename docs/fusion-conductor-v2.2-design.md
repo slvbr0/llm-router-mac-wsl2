@@ -121,6 +121,6 @@ must show quality at or above current TREE score (9.1) before this is worth buil
 ## When to implement
 
 1. ✅ Phase 1.6 (adaptive thinking depth) — DONE
-2. ⏳ Frontier bench — ant-fable+thinking vs nim-glm+thinking vs cop-opus (trigger explicitly)
+2. ⏳ Frontier bench — ant-fable+thinking vs nim-glm+thinking vs co-opus (trigger explicitly)
 3. ⏳ v2.2 conductor upgrade — after bench confirms quality ceiling
 4. ⏳ v3 worker swarm — separate initiative

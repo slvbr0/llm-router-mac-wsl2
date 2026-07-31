@@ -56,12 +56,12 @@ def test_conductor_pass_parses_score(monkeypatch):
 
 def test_committee_returns_only_good(monkeypatch):
     monkeypatch.setattr(cd, "build_panel", lambda *a, **k: {
-        "proposers": ["nim-inkling", "zen-free-deepseek", "nim-llama"], "aggregator": "nim-inkling"})
+        "proposers": ["nim-inkling", "free-deepseek", "nim-llama"], "aggregator": "nim-inkling"})
     # _committee delegates to fan_out (in fusion.fusion) -> patch fu.call_model
-    monkeypatch.setattr(fu, "call_model", _stub({"nim-inkling": "A", "zen-free-deepseek": "B"}))
+    monkeypatch.setattr(fu, "call_model", _stub({"nim-inkling": "A", "free-deepseek": "B"}))
     cfg = cd.load_config()
     good = cd._committee("t", "easy", cfg, "k", {"nim": True, "zen": True, "copilot": True}, {})
-    assert len(good) >= 2 and {"nim-inkling", "zen-free-deepseek"} <= {g["alias"] for g in good}
+    assert len(good) >= 2 and {"nim-inkling", "free-deepseek"} <= {g["alias"] for g in good}
 
 
 def _seq_conductor(scores):

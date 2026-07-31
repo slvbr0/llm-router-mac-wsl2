@@ -16,22 +16,22 @@ def route(prompt, avail=None, health=None):
 
 def test_short_prompt_is_cheap_tier_stable_free_first():
     # Stability-first: within the free class, zen-free/Mistral lead NIM. Cheap tier -> zen-free.
-    assert route("Say hi") == "zen-free-deepseek"
+    assert route("Say hi") == "free-deepseek"
 
 
 def test_default_general_is_stable_free():
     # >1200 chars so it lands in general tier, not cheap (<=300 tok = 1200 chars)
     long = "Explain the history and philosophy of stoicism " * 30
-    assert route(long) == "zen-free-nemotron"
+    assert route(long) == "free-nemotron"
 
 
 def test_code_marker_routes_to_stable_free():
-    assert route("debug this:\n```python\nprint(1)\n```") == "zen-free-north"
+    assert route("debug this:\n```python\nprint(1)\n```") == "free-north"
 
 
 def test_think_tag_routes_reason_tier():
-    # Stable free reasoners (zen-free-*) lead the reason tier over NIM.
-    assert route("[THINK] prove the halting problem is undecidable") == "zen-free-ling"
+    # Stable free reasoners (free-*) lead the reason tier over NIM.
+    assert route("[THINK] prove the halting problem is undecidable") == "free-ling"
 
 
 def test_frontier_tag_prefers_free_nim_when_healthy():
@@ -42,7 +42,7 @@ def test_frontier_falls_to_anthropic_then_copilot_when_free_down():
     # NIM + Zen down -> Anthropic Max, then Copilot. (avail without 'anthropic' key -> ant gated out.)
     r = route("[FRONTIER] design a novel consensus protocol",
               avail={"nim": False, "zen": False, "copilot": True})
-    assert r == "cop-opus"
+    assert r == "co-opus"
 
 def test_frontier_gives_nim_thinking():
     # FRONTIER keeps explicit (quality) order — not stability-sorted — so nim-glm still leads and
@@ -55,12 +55,12 @@ def test_frontier_gives_nim_thinking():
 
 
 def test_cheap_falls_to_zen_when_nim_down():
-    assert route("Say hi", avail={"nim": False, "zen": True, "copilot": True}) == "zen-free-deepseek"
+    assert route("Say hi", avail={"nim": False, "zen": True, "copilot": True}) == "free-deepseek"
 
 
 def test_reason_falls_to_copilot_when_nim_and_zen_down():
     r = route("[THINK] hard", avail={"nim": False, "zen": False, "copilot": True})
-    assert r == "cop-opus"
+    assert r == "co-opus"
 
 
 def test_health_gate_skips_slow_nim_model():
@@ -73,7 +73,7 @@ def test_health_gate_skips_slow_nim_model():
 
 def test_health_gate_all_cheap_nim_slow_falls_to_zen():
     health = {"nim-llama": {"ok": False}, "nim-deepseek-flash": {"ok": False}}
-    assert route("Say hi", health=health) == "zen-free-deepseek"
+    assert route("Say hi", health=health) == "free-deepseek"
 
 
 def test_unavailable_tag_masks_provider():
@@ -92,17 +92,17 @@ def test_novel_tag_passes_through_cleaned():
 def test_order_tier_free_class_sorts_by_latency():
     # zen-free faster than nim -> it wins within the free class
     health = {"nim-glm": {"ok": True, "latency_ms": 8000},
-              "zen-free-nemotron": {"ok": True, "latency_ms": 1500}}
-    tier = ["nim-glm", "zen-free-nemotron", "zen-glm", "cop-sonnet"]
+              "free-nemotron": {"ok": True, "latency_ms": 1500}}
+    tier = ["nim-glm", "free-nemotron", "go-glm", "co-sonnet"]
     out = pr.order_tier(tier, health)
-    assert out.index("zen-free-nemotron") < out.index("nim-glm")
+    assert out.index("free-nemotron") < out.index("nim-glm")
 
 
 def test_served_is_paid_matches_only_paid_aliases():
-    # Paid detection keys on the zen-paid-* ALIAS (underlying model names are shared with GO twins).
-    assert pr._served_is_paid("zen-paid-kimi3") is True
-    assert pr._served_is_paid("zen-paid-glm") is True
-    assert pr._served_is_paid("zen-kimi-k3") is False      # GO brain — flat, not paid
+    # Paid detection keys on the zen-* ALIAS (underlying model names are shared with GO twins).
+    assert pr._served_is_paid("zen-kimi3") is True
+    assert pr._served_is_paid("zen-glm") is True
+    assert pr._served_is_paid("go-kimi-k3") is False      # GO brain — flat, not paid
     assert pr._served_is_paid("kimi-k3") is False          # underlying id — ambiguous, never match
     assert pr._served_is_paid("nim-glm") is False
     assert pr._served_is_paid(None) is False
@@ -120,42 +120,42 @@ def test_stability_mistral_and_zenfree_beat_nim_within_free():
     # Within the free class, Mistral + zen-free are preferred over load-variable NIM even when NIM
     # is faster (stability > raw speed for a good session).
     health = {"nim-glm": {"ok": True, "latency_ms": 500},        # NIM fast...
-              "mist-large": {"ok": True, "latency_ms": 3000},    # ...Mistral slower...
-              "zen-free-north": {"ok": True, "latency_ms": 3000}}
-    out = pr.order_tier(["nim-glm", "mist-large", "zen-free-north"], health)
-    assert out.index("mist-large") < out.index("nim-glm")        # stable free first...
-    assert out.index("zen-free-north") < out.index("nim-glm")    # ...despite NIM being faster
-    assert pr._stability_rank("mist-large") == 0 and pr._stability_rank("nim-glm") == 1
+              "mis-large": {"ok": True, "latency_ms": 3000},    # ...Mistral slower...
+              "free-north": {"ok": True, "latency_ms": 3000}}
+    out = pr.order_tier(["nim-glm", "mis-large", "free-north"], health)
+    assert out.index("mis-large") < out.index("nim-glm")        # stable free first...
+    assert out.index("free-north") < out.index("nim-glm")    # ...despite NIM being faster
+    assert pr._stability_rank("mis-large") == 0 and pr._stability_rank("nim-glm") == 1
 
 
 def test_order_tier_go_never_before_free():
     # GO (class 1) stays behind ALL free (class 0) even when faster
     health = {"nim-glm": {"ok": True, "latency_ms": 8000},
-              "zen-glm": {"ok": True, "latency_ms": 900}}
-    tier = ["nim-glm", "zen-glm", "cop-sonnet"]
+              "go-glm": {"ok": True, "latency_ms": 900}}
+    tier = ["nim-glm", "go-glm", "co-sonnet"]
     out = pr.order_tier(tier, health)
-    assert out.index("nim-glm") < out.index("zen-glm")
-    assert out.index("zen-glm") < out.index("cop-sonnet")
+    assert out.index("nim-glm") < out.index("go-glm")
+    assert out.index("go-glm") < out.index("co-sonnet")
 
 
 def test_order_tier_unprobed_keeps_config_order():
-    out = pr.order_tier(["nim-deepseek", "nim-gptoss", "cop-sonnet"], {})
-    assert out == ["nim-deepseek", "nim-gptoss", "cop-sonnet"]
+    out = pr.order_tier(["nim-deepseek", "nim-gptoss", "co-sonnet"], {})
+    assert out == ["nim-deepseek", "nim-gptoss", "co-sonnet"]
 
 
 def test_pick_model_uses_latency_order():
     health = {"nim-glm": {"ok": True, "latency_ms": 9000},
-              "zen-free-nemotron": {"ok": True, "latency_ms": 1200}}
+              "free-nemotron": {"ok": True, "latency_ms": 1200}}
     avail = {"nim": True, "zen": True, "copilot": True}
-    got = pr.pick_model(["nim-glm", "zen-free-nemotron", "cop-sonnet"], avail, health)
-    assert got == "zen-free-nemotron"
+    got = pr.pick_model(["nim-glm", "free-nemotron", "co-sonnet"], avail, health)
+    assert got == "free-nemotron"
 
 
 def test_unhealthy_zen_now_filtered_too():
-    health = {"zen-free-nemotron": {"ok": False, "latency_ms": 11000}}
+    health = {"free-nemotron": {"ok": False, "latency_ms": 11000}}
     avail = {"nim": False, "zen": True, "copilot": True}
-    got = pr.pick_model(["zen-free-nemotron", "cop-sonnet"], avail, health)
-    assert got == "cop-sonnet"
+    got = pr.pick_model(["free-nemotron", "co-sonnet"], avail, health)
+    assert got == "co-sonnet"
 
 
 # --- adaptive thinking depth ---
@@ -170,10 +170,10 @@ def test_think_budget_nim_minimax_agent_returns_high():
     assert pr._think_budget("nim-minimax", "agent", False) == ("high", 32768)
 
 def test_think_budget_go_reason_returns_medium():
-    assert pr._think_budget("zen-glm", "reason", False) == ("medium", 8192)
+    assert pr._think_budget("go-glm", "reason", False) == ("medium", 8192)
 
 def test_think_budget_go_frontier_returns_high():
-    assert pr._think_budget("zen-kimi", "frontier", False) == ("high", 16384)
+    assert pr._think_budget("go-kimi", "frontier", False) == ("high", 16384)
 
 def test_think_budget_ant_reason_returns_medium():
     assert pr._think_budget("ant-opus", "reason", False) == ("medium", 8192)
@@ -188,13 +188,13 @@ def test_think_budget_cheap_tier_returns_none():
     assert pr._think_budget("nim-glm", "cheap", False) is None
 
 def test_think_budget_general_tier_returns_none():
-    assert pr._think_budget("zen-glm", "general", False) is None
+    assert pr._think_budget("go-glm", "general", False) is None
 
 def test_think_budget_non_thinking_model_returns_none():
     assert pr._think_budget("nim-deepseek", "reason", False) is None
 
 def test_think_budget_boost_forces_high_on_go():
-    assert pr._think_budget("zen-glm", "reason", True) == ("high", 16384)
+    assert pr._think_budget("go-glm", "reason", True) == ("high", 16384)
 
 def test_think_budget_boost_forces_high_on_ant():
     assert pr._think_budget("ant-sonnet", "agent", True) == ("high", 16384)
@@ -285,7 +285,7 @@ def test_hook_injects_nim_glm_extra_body_at_reason():
     assert "thinking_budget_tokens" not in result["extra_body"]
 
 def test_hook_injects_go_medium_at_reason():
-    data = {"model": "zen-glm", "messages": [{"role": "user", "content": "[REASON] explain this trade-off"}]}
+    data = {"model": "go-glm", "messages": [{"role": "user", "content": "[REASON] explain this trade-off"}]}
     result = _hook(data)
     # GO takes an effort knob, not a token budget: `thinking_budget_tokens` 400s on this provider.
     assert result.get("extra_body", {}).get("reasoning_effort") == "medium"
@@ -297,7 +297,7 @@ def test_hook_no_thinking_on_cheap_prompt_nim_glm():
     assert "extra_body" not in result
 
 def test_hook_boost_forces_high_on_go():
-    data = {"model": "zen-glm", "messages": [{"role": "user", "content": "[BOOST][REASON] redo this"}]}
+    data = {"model": "go-glm", "messages": [{"role": "user", "content": "[BOOST][REASON] redo this"}]}
     result = _hook(data)
     assert result["extra_body"]["reasoning_effort"] == "high"
 
@@ -306,8 +306,8 @@ def test_hook_force_tier_lifts_orchestrator_to_high():
     MEDIUM-thought. The synthesizer is what catches their errors, so it must think HIGH. It
     asks for that via metadata, not by prepending [FRONTIER] to a prompt the model would read."""
     drafts = "--- DRAFT 1 (nim-glm) ---\nsome draft text"
-    without = _hook({"model": "zen-glm", "messages": [{"role": "user", "content": drafts}]})
-    with_ft = _hook({"model": "zen-glm", "metadata": {"force_tier": "frontier"},
+    without = _hook({"model": "go-glm", "messages": [{"role": "user", "content": drafts}]})
+    with_ft = _hook({"model": "go-glm", "metadata": {"force_tier": "frontier"},
                      "messages": [{"role": "user", "content": drafts}]})
     assert with_ft["extra_body"]["reasoning_effort"] == "high"            # go/frontier -> HIGH
     assert with_ft["metadata"]["llmr_ann"]["think"] == "high"
@@ -329,14 +329,14 @@ def test_hook_force_tier_is_not_forwarded_to_provider():
 
 def test_hook_go_thinking_uses_reasoning_effort_not_nim_params():
     """opencode GO 400s on `enable_thinking`/`thinking_budget_tokens`. It takes reasoning_effort."""
-    r = _hook({"model": "zen-glm", "messages": [{"role": "user", "content": "[REASON] prove it"}]})
+    r = _hook({"model": "go-glm", "messages": [{"role": "user", "content": "[REASON] prove it"}]})
     eb = r.get("extra_body", {})
     assert eb.get("reasoning_effort") == "medium"          # go/reason -> MEDIUM
     assert "enable_thinking" not in eb
     assert "thinking_budget_tokens" not in eb
 
 def test_hook_go_frontier_is_high_effort():
-    r = _hook({"model": "zen-glm", "messages": [{"role": "user", "content": "[FRONTIER] hard"}]})
+    r = _hook({"model": "go-glm", "messages": [{"role": "user", "content": "[FRONTIER] hard"}]})
     assert r["extra_body"]["reasoning_effort"] == "high"
 
 def test_hook_nim_uses_chat_template_kwargs_not_go_or_plain_params():
@@ -427,38 +427,38 @@ def test_streaming_no_annotation_when_state_absent():
     assert out[0] == "hi"      # no metadata -> no banner, never crashes
 
 
-# --- free-tier native reasoners (zen-free-ling/mimo/north) -------------------------------------
+# --- free-tier native reasoners (free-ling/mimo/north) -------------------------------------
 # They reason at max depth with NO param (reasoning_effort only shrinks it), and they're free,
 # so: always HIGH, inject nothing, annotate the banner high.
 
 def test_free_reasoner_budget_is_high_any_tier_no_boost():
     for tier in ("reason", "code", "cheap", "general", "frontier"):
-        assert pr._think_budget("zen-free-mimo", tier, False) == ("high", 0)
+        assert pr._think_budget("free-mimo", tier, False) == ("high", 0)
 
 def test_free_reasoner_injects_no_param_but_annotates_high():
-    r = _hook({"model": "zen-free-ling", "messages": [{"role": "user", "content": "[REASON] prove it"}]})
+    r = _hook({"model": "free-ling", "messages": [{"role": "user", "content": "[REASON] prove it"}]})
     assert "extra_body" not in r                        # no reasoning_effort, no chat_template_kwargs
     assert "thinking" not in r
     assert r["metadata"]["llmr_ann"]["think"] == "high"  # banner still shows high (native)
 
 def test_free_reasoner_carries_exactly_one_or_zero_dialects():
     # covered by the ALL_THINKING guard, but pin it: free reasoners inject ZERO param dialects.
-    for m in ("zen-free-ling", "zen-free-mimo", "zen-free-north"):
+    for m in ("free-ling", "free-mimo", "free-north"):
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[REASON] x"}]})
         eb = r.get("extra_body", {})
         assert not r.get("thinking") and "reasoning_effort" not in eb \
             and "enable_thinking" not in eb.get("chat_template_kwargs", {})
 
 def test_free_reasoners_are_in_reason_tier():
-    for m in ("zen-free-ling", "zen-free-mimo", "zen-free-north"):
+    for m in ("free-ling", "free-mimo", "free-north"):
         assert m in pr.REASON_TIER
 
 
 # --- orchestrator/auditor tier (top-layer brain: grok-4.5 + kimi-k3 -> capable reasoners) -----
 
 def test_orch_default_is_free_first_not_zen():
-    # Orchestrator now leads with FREE (mist-medium/nim-glm), zen GO is LAST. With only nim/zen up,
-    # the free NIM reasoner leads; zen-glm is only reached if all free/flat are down.
+    # Orchestrator now leads with FREE (mis-medium/nim-glm), zen GO is LAST. With only nim/zen up,
+    # the free NIM reasoner leads; go-glm is only reached if all free/flat are down.
     assert route("[ORCH] synthesize these drafts") == "nim-glm"
     assert route("[AUDIT] check this answer") == "nim-glm"
 
@@ -469,9 +469,9 @@ def test_orch_boost_stays_free_not_brain_not_zen():
     assert route("[BOOST][AUDIT] redo this", avail=av) == "nim-glm"
 
 def test_orch_free_before_zen_full_avail():
-    # With everything up, the stable free reasoner (mist-medium) leads — zen never touched.
+    # With everything up, the stable free reasoner (mis-medium) leads — zen never touched.
     av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
-    assert route("[BOOST][ORCH] wrong, redo", avail=av) == "mist-medium"
+    assert route("[BOOST][ORCH] wrong, redo", avail=av) == "mis-medium"
 
 def test_brains_never_auto_selected_on_everyday_tiers():
     # The scarce brains (grok 120 req/5h, kimi-k3 110) are allowed ONLY at the frontier tail.
@@ -493,45 +493,45 @@ def test_brains_are_the_frontier_tail_last_resort():
     assert pr.route("x", {"tier": "frontier"}, av, down) in pr.LAST_RESORT_BRAINS
     # They sit at the very end of the tier, after copilot.
     for b in pr.LAST_RESORT_BRAINS:
-        assert pr.FRONTIER_TIER.index(b) > pr.FRONTIER_TIER.index("cop-opus")
+        assert pr.FRONTIER_TIER.index(b) > pr.FRONTIER_TIER.index("co-opus")
 
 def test_brain_still_reachable_by_EXPLICIT_request():
     # Restriction is AUTO-only: if opencode explicitly names the alias, it still routes there.
-    r = _hook({"model": "zen-kimi-k3", "messages": [{"role": "user", "content": "hard verdict"}]})
-    assert r["model"] == "zen-kimi-k3"                       # not rerouted away
+    r = _hook({"model": "go-kimi-k3", "messages": [{"role": "user", "content": "hard verdict"}]})
+    assert r["model"] == "go-kimi-k3"                       # not rerouted away
 
 def test_orchestrator_falls_to_zen_only_when_free_and_flat_down():
     # zen GO is the LAST orchestrator resort: reached only when free (nim) + flat (z.ai/anthropic)
-    # are all unavailable. Here nim is down and mistral/zai/anthropic absent -> zen-glm.
+    # are all unavailable. Here nim is down and mistral/zai/anthropic absent -> go-glm.
     av = {"nim": False, "zen": True, "copilot": True}
-    assert route("[ORCH] x", avail=av) == "zen-glm"
+    assert route("[ORCH] x", avail=av) == "go-glm"
 
 def test_orchestrator_free_nim_leads_when_flat_down():
     # brains + anthropic down, but free NIM up -> nim-glm leads (free before zen GO).
     av = {"nim": True, "zen": True, "copilot": True, "anthropic": False}
-    h = {"zen-kimi-k3": {"ok": False}, "zen-grok": {"ok": False}}
+    h = {"go-kimi-k3": {"ok": False}, "go-grok": {"ok": False}}
     assert route("[ORCH] x", avail=av, health=h) == "nim-glm"
 
 def test_orch_brains_get_high_thinking_via_go_shape():
-    r = _hook({"model": "zen-kimi-k3", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
+    r = _hook({"model": "go-kimi-k3", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
     assert r["extra_body"]["reasoning_effort"] == "high"   # GO shape, orchestrator -> high
-    r2 = _hook({"model": "zen-grok", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
+    r2 = _hook({"model": "go-grok", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
     assert r2["extra_body"]["reasoning_effort"] == "high"
 
 def test_orch_brains_are_flatrate_cost_class():
     # GO flat-rate leads the flat band (class 1), not per-token/anthropic
-    assert pr._cost_class("zen-kimi-k3") == 1 and pr._cost_class("zen-grok") == 1
+    assert pr._cost_class("go-kimi-k3") == 1 and pr._cost_class("go-grok") == 1
 
 def test_orch_l2_capables_in_tier():
-    for m in ("zen-qwen-max", "zen-qwen-plus", "zen-deepseek", "zen-minimax", "zen-mimo"):
+    for m in ("go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo"):
         assert m in pr.ORCHESTRATOR_TIER
 
 def test_orch_l2_reasoners_get_high_others_off():
     # qwen/deepseek emit CoT (verified live) -> reasoning_effort high; minimax/mimo don't -> off
-    for m in ("zen-qwen-max", "zen-qwen-plus", "zen-deepseek"):
+    for m in ("go-qwen-max", "go-qwen-plus", "go-deepseek"):
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[ORCH] x"}]})
         assert r["extra_body"]["reasoning_effort"] == "high"
-    for m in ("zen-mimo",):     # not in GO_THINKING -> no param, banner off
+    for m in ("go-mimo",):     # not in GO_THINKING -> no param, banner off
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[ORCH] x"}]})
         assert "extra_body" not in r
         assert r["metadata"]["llmr_ann"]["think"] == "off"
@@ -541,10 +541,10 @@ def test_orch_l2_reasoners_get_high_others_off():
 
 def test_role_tags_map_to_worker_tiers():
     # Stability-first: workers land on the stable-free leader of their tier (zen-free), not NIM.
-    assert route("[SCOUT] list the files in this repo") == "zen-free-deepseek"  # cheap
-    assert route("[ANALYST] interpret these benchmark numbers") == "zen-free-ling"  # reason
-    assert route("[VERIFIER] check this claim against the source") == "zen-free-ling"
-    assert route("[AUDITOR] does the code match the spec") == "zen-free-ling"
+    assert route("[SCOUT] list the files in this repo") == "free-deepseek"  # cheap
+    assert route("[ANALYST] interpret these benchmark numbers") == "free-ling"  # reason
+    assert route("[VERIFIER] check this claim against the source") == "free-ling"
+    assert route("[AUDITOR] does the code match the spec") == "free-ling"
 
 def test_role_tag_parsed_and_stripped():
     cleaned, d = pr.parse_request("[SCOUT] gather links")
@@ -555,13 +555,13 @@ def test_role_tag_parsed_and_stripped():
 def test_orch_boss_distinct_from_worker_roles():
     # [ORCH] = orchestrator tier (free-first: nim-glm), role tags are the reason/cheap workers.
     assert route("[ORCH] final verdict") == "nim-glm"           # orchestrator tier (free leads, zen last)
-    assert route("[VERIFIER] check") == "zen-free-ling"          # reason tier (stable-free leads)
+    assert route("[VERIFIER] check") == "free-ling"          # reason tier (stable-free leads)
 
 
 # --- paid per-token overflow ($20 balance) ---------------------------------------------------
 
-PAID = ["zen-paid-minimax", "zen-paid-qwen-plus", "zen-paid-glm", "zen-paid-luna",
-        "zen-paid-grok", "zen-paid-qwen-max", "zen-paid-kimi3", "zen-paid-terra", "zen-paid-sol"]
+PAID = ["zen-minimax", "zen-qwen-plus", "zen-glm", "zen-luna",
+        "zen-grok", "zen-qwen-max", "zen-kimi3", "zen-terra", "zen-sol"]
 
 def test_paid_models_are_pertoken_cost_class_4():
     # per-token (class 4) sits BELOW every flat sub (z.ai 1, GO 2, Anthropic Max 3) and above only
@@ -576,9 +576,9 @@ def test_paid_models_never_in_a_default_tier():
             assert m not in tier, f"{m} leaked into a default tier"
 
 def test_paid_reasoners_use_reasoning_effort_minimax_excluded():
-    r = _hook({"model": "zen-paid-glm", "messages": [{"role": "user", "content": "[REASON] x"}]})
+    r = _hook({"model": "zen-glm", "messages": [{"role": "user", "content": "[REASON] x"}]})
     assert r["extra_body"]["reasoning_effort"] == "medium"      # go/reason
-    r2 = _hook({"model": "zen-paid-minimax", "messages": [{"role": "user", "content": "[REASON] x"}]})
+    r2 = _hook({"model": "zen-minimax", "messages": [{"role": "user", "content": "[REASON] x"}]})
     assert "extra_body" not in r2                               # minimax: no CoT -> no param
 
 
@@ -588,41 +588,41 @@ ALL_OK2 = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": 
 
 
 def test_provider_map_knows_mistral_and_zai():
-    assert pr.MODEL_PROVIDER["mist-large"] == "mistral"
-    assert pr.MODEL_PROVIDER["mist-magistral"] == "mistral"
+    assert pr.MODEL_PROVIDER["mis-large"] == "mistral"
+    assert pr.MODEL_PROVIDER["mis-magistral"] == "mistral"
     assert pr.MODEL_PROVIDER["zai-52"] == "zai"
     assert pr.MODEL_PROVIDER["zai-flash"] == "zai"
 
 
 def test_cost_class_cascade_free_go_zai_flat_paid_copilot():
     # The whole ordering intent in one assertion: strictly increasing marginal cost.
-    assert pr._cost_class("mist-large") == 0        # Mistral free
+    assert pr._cost_class("mis-large") == 0        # Mistral free
     assert pr._cost_class("nim-glm") == 0           # NIM free
-    assert pr._cost_class("zen-glm") == 1           # GO flat   (BEFORE z.ai)
+    assert pr._cost_class("go-glm") == 1           # GO flat   (BEFORE z.ai)
     assert pr._cost_class("zai-52") == 2            # z.ai flat
     assert pr._cost_class("ant-sonnet") == 3        # Anthropic Max flat (BEFORE zen paid)
     assert pr._cost_class("cod-sol") == 3           # Codex flat SHARES the Anthropic band
-    assert pr._cost_class("zen-paid-glm") == 4      # zen per-token
-    assert pr._cost_class("cop-opus") == 5          # copilot per-request
+    assert pr._cost_class("zen-glm") == 4      # zen per-token
+    assert pr._cost_class("co-opus") == 5          # copilot per-request
 
 
 def test_go_flat_ranks_before_zai_in_reason_tier():
-    # Sorted reason tier: free (mist/nim/zen-free) then GO zen-glm(1) then z.ai(2) then ant(3).
+    # Sorted reason tier: free (mist/nim/zen-free) then GO go-glm(1) then z.ai(2) then ant(3).
     ordered = pr.order_tier(pr.REASON_TIER, {})
-    assert ordered.index("zen-glm") < ordered.index("zai-52")
-    assert ordered.index("mist-medium") < ordered.index("zen-glm")  # free before flat
+    assert ordered.index("go-glm") < ordered.index("zai-52")
+    assert ordered.index("mis-medium") < ordered.index("go-glm")  # free before flat
     assert ordered.index("ant-sonnet") > ordered.index("zai-52")    # anth after both flats
 
 
 def test_anthropic_flat_ranks_before_zen_paid():
     # Both appear in the frontier-ish fallback space; anth (sunk) must precede zen paid ($).
-    tier = ["zen-paid-glm", "ant-sonnet"]
-    assert pr.order_tier(tier, {}) == ["ant-sonnet", "zen-paid-glm"]
+    tier = ["zen-glm", "ant-sonnet"]
+    assert pr.order_tier(tier, {}) == ["ant-sonnet", "zen-glm"]
 
 
 def test_mistral_reasoners_are_native_no_param():
     # magistral / mistral-medium reason inline with NO param (verified live). Inject nothing.
-    for m in ("mist-medium", "mist-magistral"):
+    for m in ("mis-medium", "mis-magistral"):
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[REASON] prove it"}]},
                   avail=ALL_OK2)
         assert r["model"] == m
@@ -632,7 +632,7 @@ def test_mistral_reasoners_are_native_no_param():
 
 
 def test_mistral_non_reasoners_get_no_thinking():
-    for m in ("mist-large", "mist-codestral"):
+    for m in ("mis-large", "mis-codestral"):
         r = _hook({"model": m, "messages": [{"role": "user", "content": "[CODE] write a parser"}]},
                   avail=ALL_OK2)
         assert "thinking" not in r
@@ -672,7 +672,7 @@ def test_nim_step_is_free_native_reasoner_no_param():
 
 def test_go_flat_beats_zai_when_free_reasoners_health_gated():
     # Cost cascade at the routing level: with EVERY free model gated off, the reason tier serves
-    # GO zen-glm (class 1) before z.ai (class 2). NIM/Mistral are also masked by availability.
+    # GO go-glm (class 1) before z.ai (class 2). NIM/Mistral are also masked by availability.
     # All of FREE_POOL must go down, not just the reason-tier ones: since free_fallback() the
     # tier borrows any other healthy free model first — which is the point of that feature.
     health = {m: {"ok": False} for m in pr.FREE_POOL}
@@ -682,7 +682,7 @@ def test_go_flat_beats_zai_when_free_reasoners_health_gated():
               health=health)
     # Assert the INTENT (GO flat class 1 beats z.ai class 2), not a specific alias — which GO
     # model wins depends on the quota ranking and changes as opencode adds models.
-    assert r in pr.ZEN_GO_ALIASES, f"expected a GO model, got {r}"
+    assert r in pr.GO_ALIASES, f"expected a GO model, got {r}"
     assert pr._cost_class(r) == 1 < pr._cost_class("zai-52")
 
 
@@ -695,8 +695,8 @@ def test_codex_shares_the_anthropic_flat_band():
 
 
 def test_codex_ranks_after_free_and_both_flats_but_before_zen_paid():
-    tier = ["zen-paid-glm", "cod-luna", "zai-52", "zen-glm", "nim-glm"]
-    assert pr.order_tier(tier, {}) == ["nim-glm", "zen-glm", "zai-52", "cod-luna", "zen-paid-glm"]
+    tier = ["zen-glm", "cod-luna", "zai-52", "go-glm", "nim-glm"]
+    assert pr.order_tier(tier, {}) == ["nim-glm", "go-glm", "zai-52", "cod-luna", "zen-glm"]
 
 
 def test_codex_reasoner_gets_effort_knob_not_thinking_block():
@@ -721,7 +721,7 @@ def test_codex_non_reasoners_get_no_thinking_param():
 
 def test_tier_native_free_still_wins_when_healthy():
     # Borrowing must not disturb the normal case: the tier's own free pick still leads.
-    assert route("hi") == "zen-free-deepseek"
+    assert route("hi") == "free-deepseek"
 
 
 def test_cheap_borrows_a_free_model_before_any_subscription():
@@ -782,13 +782,13 @@ def test_health_probes_only_free_models():
 def test_go_luna_beats_codex_luna():
     # Same underlying model (gpt-5.6-luna). GO is a flat subscription at cost class 1; Codex is
     # class 3. Routing must prefer the cheaper class rather than the Codex proxy.
-    assert pr.order_tier(["cod-luna", "zen-luna"], {},
-                         native={"cod-luna", "zen-luna"})[0] == "zen-luna"
+    assert pr.order_tier(["cod-luna", "go-luna"], {},
+                         native={"cod-luna", "go-luna"})[0] == "go-luna"
 
 
 def test_new_go_models_are_flat_class_one():
-    for m in ("zen-mimo-lite", "zen-hy3", "zen-luna"):
-        assert m in pr.ZEN_GO_ALIASES
+    for m in ("go-mimo-lite", "go-hy3", "go-luna"):
+        assert m in pr.GO_ALIASES
         assert pr._cost_class(m) == 1
 
 
@@ -796,15 +796,15 @@ def test_generous_go_models_lead_their_band():
     # Inside the GO band, config order encodes quota generosity (req/5h), since GO is never
     # latency-probed: mimo-lite 30,100 > hy3 4,300 > luna 2,050 > glm-5.2 880.
     go = [m for m in pr.order_tier(pr.GENERAL_TIER, {}, native=set(pr.GENERAL_TIER))
-          if m in pr.ZEN_GO_ALIASES]
-    assert go.index("zen-mimo-lite") < go.index("zen-glm")
-    assert go.index("zen-hy3") < go.index("zen-glm")
+          if m in pr.GO_ALIASES]
+    assert go.index("go-mimo-lite") < go.index("go-glm")
+    assert go.index("go-hy3") < go.index("go-glm")
 
 
 def test_low_quota_brains_stay_out_of_the_go_band_after_expansion():
     # grok 120/5h and kimi-k3 110/5h are the scarcest GO models. The roster grew to 17, but they
     # must still appear in NO everyday tier — only the frontier tail.
-    for m in ("zen-grok", "zen-kimi-k3"):
+    for m in ("go-grok", "go-kimi-k3"):
         for name, tier in pr.TIER_MAP.items():
             if name != "frontier":
                 assert m not in tier, f"{m} leaked into {name}"

@@ -2,6 +2,8 @@
 
 One OpenAI-compatible endpoint, many free and cheap models behind it, cost discipline in the routing.
 
+**2026-07-31** — **prompt caching, end to end**. Measured every model's real cache hit rate from the audit trail into `model_cache.yaml`, and the router now prefers a model that caches once the payload is big enough for prefill to hurt. Anthropic was the one lane caching nothing (it needs explicit `cache_control`; every other provider does it automatically) — now fixed, 0 → 99.9%. Plus session stickiness so a conversation stops throwing away the provider's cache by switching models mid-thread, and prompt size is now measured on the whole payload rather than the last message.
+
 **2026-07-30** — **aliases renamed so the prefix names the billing lane**: `go-*` opencode GO flat · `zen-*` Zen per-token · `free-*` Zen free tier · `nim-*` · `mis-*` Mistral · `zai-*` · `ant-*` · `cod-*` Codex · `co-*` Copilot. Wired the full 17-model GO roster ranked by quota, added the Codex/ChatGPT OAuth backend, refreshed the NIM roster after NVIDIA delisted the Qwen family, and made tiers borrow free capacity before spending any subscription.
 
 ## What it does
@@ -19,10 +21,15 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
 3. **Availability mask.** `availability.yaml` is read on this request and merged with the per-request allow/deny lists. It is a per-provider on/off switch you edit by hand.
 4. **Health mask.** `load_health()` re-reads `model_health.yaml` from disk on **every** request — no cache, no process restart needed. Any alias marked `ok: false` is dropped from the candidate list; a missing or unparseable file fails open, so nothing is dropped. The file is written by `scripts/nim_health.sh`, which probes only the free aliases (NIM, Mistral free, zen-free) in parallel with a 16-token "reply OK" call, fallbacks off. A probe passes only if it returns 200, under `NIM_LATENCY_MAX_MS` (8000 by default), echoes back the alias it asked for, and reports `completion_tokens > 0` — a 200 alone would certify a dead alias that a substitute answered. `scripts/install_health_timer.sh` runs that audit every 15 minutes, plus within ~30s of a paid model answering. Flat-rate backends are never probed; probing spends their quota for nothing.
 5. **Content heuristics.** No tag, so `classify()` runs regexes in order: code markers (fences, tracebacks, `def`/`import`, "debug") → `code`; logic words → `reason`; agent words → `agent`; under ~300 tokens → `cheap`; otherwise `general`. This prompt hits `code`.
-6. **Cost chain pick.** `CODE_TIER` is sorted by `(cost class, stability, measured latency)`. Cost classes never leapfrog: free → opencode GO flat → Codex flat → Claude Max flat → z.ai flat → Zen per-token → Copilot. Every sunk-cost subscription is drained before real money, and inside a class the config order encodes quota generosity (flat lanes are never latency-probed, because probing spends the quota they are held in reserve for). Two rules shape the tiers: **free capacity is shared** — a free model listed only in REASON can still answer a CHEAP prompt, since free is free — while **flat capacity is not**, because each tier already carries its own flat fallback chosen for that tier. And scarce or frontier-priced models (`go-grok`, `go-kimi-k3`, `cod-sol`, `ant-opus`, `ant-fable`) are confined to the frontier and orchestrator tiers, never everyday work.
-7. **Thinking budget.** Each family takes a different parameter shape, so the router injects the right one: an Anthropic thinking block, `reasoning_effort`, or `chat_template_kwargs.enable_thinking`. Native reasoners get nothing injected.
-8. **The call goes out.** A failure mid-request is not the router's fallback — LiteLLM's own chain serves a substitute. The router sees it afterwards: if the alias that actually answered was `zen-*`, it touches a trigger file, and the health refresher re-audits the free models so the next prompt can go back to free.
-9. **Logged.** LiteLLM writes the routed alias, the served model, tokens and spend to Postgres. The response is prefixed `[model · think:level · tier]` so the choice is visible while you work.
+6. **Cost chain pick.** `CODE_TIER` is sorted by `(cost class, capability, cache, stability, measured latency)`. Cost classes never leapfrog: free → opencode GO flat → Codex flat → Claude Max flat → z.ai flat → Zen per-token → Copilot. Every sunk-cost subscription is drained before real money, and inside a class the config order encodes quota generosity (flat lanes are never latency-probed, because probing spends the quota they are held in reserve for). Two rules shape the tiers: **free capacity is shared** — a free model listed only in REASON can still answer a CHEAP prompt, since free is free — while **flat capacity is not**, because each tier already carries its own flat fallback chosen for that tier. And scarce or frontier-priced models (`go-grok`, `go-kimi-k3`, `cod-sol`, `ant-opus`, `ant-fable`) are confined to the frontier and orchestrator tiers, never everyday work.
+
+   Two more things shape the same sort once a payload gets big. **Capability** is the highest tier a model natively belongs to, and past ~25k tokens a model that only ever qualified for CHEAP is dropped — it would return *something*, which is exactly why that failed silently instead of erroring. **Cache** kicks in earlier, past ~4k: a model measured at ~0% hit rate loses its slot to one that caches, because it re-runs prefill over the whole payload on every single turn. Neither can outrank cost class, so this only ever reorders models that cost the same.
+
+7. **Stickiness.** A conversation keeps the model it started with — keyed on a hash of its first user message — as long as the tier has not changed and the model is still healthy. Switching mid-thread throws away whatever prefix the provider had cached, which is the expensive way to answer the same question.
+8. **Thinking budget.** Each family takes a different parameter shape, so the router injects the right one: an Anthropic thinking block, `reasoning_effort`, or `chat_template_kwargs.enable_thinking`. Native reasoners get nothing injected.
+9. **Cache breakpoints.** Every provider here caches long prefixes automatically except Anthropic, which needs explicit `cache_control`. For `ant-*` only, the router marks two breakpoints — the system prompt and the end of the history — leaving the newest turn uncached. Nothing is injected anywhere else: an unexpected field is what returns a 400 that a fallback then hides.
+10. **The call goes out.** A failure mid-request is not the router's fallback — LiteLLM's own chain serves a substitute. The router sees it afterwards: if the alias that actually answered was `zen-*`, it touches a trigger file, and the health refresher re-audits the free models so the next prompt can go back to free.
+11. **Logged.** LiteLLM writes the routed alias, the served model, tokens and spend to Postgres. The response is prefixed `[model · think:level · tier]` so the choice is visible while you work.
 
 ## Architecture
 
@@ -37,8 +44,9 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
         |  parse_request()      tags -> directives
         |  load_availability()  <-- availability.yaml   (hand-edited on/off)
         |  load_health()        <-- model_health.yaml   (re-read every request)
+        |  load_cache_profile() <-- model_cache.yaml    (re-read every request)
         |  classify()           prompt -> cheap|code|reason|agent|general
-        |  order_tier() / pick_model()  cost class -> stability -> latency
+        |  order_tier() / pick_model()  cost -> capability -> cache -> stability -> latency
         v
   provider: NIM | Mistral | Zen | z.ai GLM | Claude OAuth | Codex OAuth | Copilot
         |                          ^                ^          |
@@ -47,12 +55,15 @@ None of this is learned. `priority_router.py` is a readable priority list. Here 
         v
   async_post_call_success_hook -> Postgres LiteLLM_SpendLogs  (audit)
 
-  scripts/nim_health.sh --(every 15 min, install_health_timer.sh)--> model_health.yaml
+  scripts/nim_health.sh  --(every 15 min, install_health_timer.sh)--> model_health.yaml
+  scripts/cache_audit.sh --(SQL over SpendLogs, on start.sh)--------> model_cache.yaml
 ```
 
 `config.yaml` registers the router as a LiteLLM callback (`callbacks: priority_router.router_instance`) and holds every model block; `docker-compose.yml` binds the proxy to `127.0.0.1:4040` and mounts `priority_router.py` read-only next to the Postgres audit database. All routing logic lives in `priority_router.py` — `parse_request`, `classify`, `order_tier` and `pick_model` run inside `PriorityRouter.async_pre_call_hook`, and `async_post_call_success_hook` handles the audit write plus the paid-model refresh trigger.
 
-Two YAML files are state, not config-you-ship: `availability.yaml` is the per-provider switch you edit by hand, and `model_health.yaml` is written by `scripts/nim_health.sh` on a 15-minute timer installed by `scripts/install_health_timer.sh`. Both are read fresh on every request, so neither needs a restart.
+Three YAML files are state, not config-you-ship: `availability.yaml` is the per-provider switch you edit by hand; `model_health.yaml` is written by `scripts/nim_health.sh` on a 15-minute timer installed by `scripts/install_health_timer.sh`; and `model_cache.yaml` is written by `scripts/cache_audit.sh`, one SQL query over the audit trail that spends no quota. All three are read fresh on every request, so none needs a restart, and a missing or unparseable file fails open rather than dropping candidates.
+
+Measuring the cache profile rather than hardcoding it is deliberate: a hand-kept "these models cache" table is wrong the moment a provider changes, and the numbers are not guessable — on this account `free-pickle` caches 87% and `free-north` caches 0%, both free, both from the same provider. Models with too few samples stay *unknown*, which is never penalised; penalising the unmeasured would bias routing toward whatever already has traffic.
 
 Providers are plain LiteLLM backends except two that reuse an existing subscription instead of an API key: Claude through `providers/claude_oauth_proxy.py` (:4041, a pass-through that injects OAuth headers), and Codex/ChatGPT through `providers/codex_oauth_proxy.py` (:4042). The Codex shim does more work — that subscription serves GPT only via `chatgpt.com/backend-api/codex/responses`, which speaks the Responses API and refuses non-streaming requests, so the proxy translates chat/completions in both directions and re-assembles the SSE stream. It reads `~/.codex/auth.json` fresh per request so a token the Codex CLI refreshes is picked up without a restart. Everything that answered is logged to the Postgres `LiteLLM_SpendLogs` table, which is what `scripts/show_routing.sh`, `scripts/usage.sh` and `scripts/export_audit.sh` read.
 
@@ -62,6 +73,7 @@ Providers are plain LiteLLM backends except two that reuse an existing subscript
 sh scripts/show_routing.sh 15      # 09:41:02 | nim-glm | z-ai/glm-5.2 | 1840
 sh scripts/usage.sh                # nim (free) | 412 reqs | 2.1M tok | $0.0000
 sh scripts/export_audit.sh         # exported 1204 requests -> logs/audit-20260729-114302.csv
+sh scripts/cache_audit.sh          # free-pickle | 87.0 | 30   (rewrites model_cache.yaml)
 ```
 
 `show_routing.sh watch` refreshes the same table every 2s. All three read the Postgres audit table directly; `psql` against `LiteLLM_SpendLogs` is the interface if you want a different cut.
@@ -91,6 +103,11 @@ litellm --config config.yaml --port 4040
 ```
 
 Set `DATABASE_URL` for the audit trail, or skip it and lose only that. This is Python. There is no npm or npx package. The proxy binds `127.0.0.1` on purpose.
+
+The same tree runs on macOS and on Linux/WSL2 — the OAuth shims pick their bind address per platform, so no per-host edits. Two things to know if you run both:
+
+- The compose **service** is `litellm`; `litellm-proxy` is only the `container_name`. `docker compose up -d --force-recreate litellm` is the one that re-reads `docker-compose.yml`.
+- `docker start` does **not** re-read compose. If you add a mount and restart with `docker start`, the container comes up healthy without it and the router silently fails open — which looks exactly like the feature not working. `docker inspect <name> --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}'` is the check.
 
 ## Use it with
 

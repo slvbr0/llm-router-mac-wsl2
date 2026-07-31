@@ -1,4 +1,4 @@
-# LLM Router (macOS) — Full Stack Documentation
+# LLM Router (macOS + Linux/WSL2) — Full Stack Documentation
 
 **Built & verified 2026-07-06.** Source-of-truth for what runs where, how it was
 wired, and the gotchas discovered during the build.
@@ -72,11 +72,16 @@ A LiteLLM `async_pre_call_hook`. Per prompt: parse tags → apply availability +
 health masks → classify tier → pick the first responsive/cheapest model → rewrite
 `data["model"]`. Layers and cost-ordered tiers are described in the
 [README](../README.md#how-routing-decides-model-auto). Unit-tested in
-`tests/test_priority_router.py` (11 tests; `tests/conftest.py` stubs `litellm` so
+`tests/test_priority_router.py` (127 tests; `tests/conftest.py` stubs `litellm` so
 tests run without the heavy dep — litellm is only present at runtime in the container).
 
-`model_health.yaml` and `availability.yaml` are read **fresh per request** (no
-restart to apply changes). Both fail-open.
+`model_health.yaml`, `availability.yaml` and `model_cache.yaml` are read **fresh per
+request** (no restart to apply changes). All three fail-open.
+
+The cache profile is the one that fails open *invisibly*: with no file the router
+simply stops preferring models that cache, and everything still answers. Verify the
+mount rather than the container's health — see the WSL2 note in the README install
+section.
 
 ---
 

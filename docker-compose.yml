@@ -18,6 +18,9 @@ services:
       - ./priority_router.py:/app/priority_router.py:ro
       - ./availability.yaml:/app/availability.yaml
       - ./model_health.yaml:/app/model_health.yaml
+      # Cache profile (scripts/cache_audit.sh). Read fresh per request like the health file;
+      # without this mount the router sees no profile and fails open — no cache preference.
+      - ./model_cache.yaml:/app/model_cache.yaml
       - ./.llmr-refresh-trigger:/app/.llmr-refresh-trigger   # router touches this after a PAID call -> host refresher re-audits free models fast
       - litellm-tokens:/app/.litellm
     env_file:
@@ -27,6 +30,7 @@ services:
       - STORE_MODEL_IN_DB=True
       - AVAILABILITY_CONFIG=/app/availability.yaml
       - MODEL_HEALTH_CONFIG=/app/model_health.yaml
+      - MODEL_CACHE_CONFIG=/app/model_cache.yaml
       - PYTHONPATH=/app
       - GITHUB_COPILOT_TOKEN_DIR=/app/.litellm/github_copilot
       - DISABLE_AIOHTTP_TRANSPORT=True   # aiohttp socket read-timeout kills silent thinking streams; httpx respects timeouts

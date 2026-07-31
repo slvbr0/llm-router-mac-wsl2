@@ -929,3 +929,66 @@ def test_small_conversation_is_unaffected_by_the_payload_measure():
     av = {p: True for p in pr.PRIORITY_CHAIN}
     got = pr.route("say hi", {}, av, {}, context_chars=len("say hi"))
     assert pr._cost_class(got) == 0
+
+
+# --- cache-aware routing + session stickiness (2026-07-31) -------------------------------------
+# Measured: free-north caches 0% across 28.35M prompt tokens and is the CODE-tier default, so
+# every turn re-runs prefill over the whole payload. Costs nothing on a free lane; costs latency
+# on every request.
+
+PROFILE = {"free-north": {"hit_pct": 0.0, "samples": 50},
+           "nim-step": {"hit_pct": 0.0, "samples": 28},
+           "free-pickle": {"hit_pct": 92.8, "samples": 17},
+           "thin-model": {"hit_pct": 0.0, "samples": 2}}
+
+
+def test_cache_rank_demotes_only_measured_zeros():
+    assert pr._cache_rank("free-north", PROFILE) == 1
+    assert pr._cache_rank("nim-step", PROFILE) == 1
+    assert pr._cache_rank("free-pickle", PROFILE) == 0
+    assert pr._cache_rank("mis-large", PROFILE) == 0      # unknown is never penalised
+    assert pr._cache_rank("thin-model", PROFILE) == 0     # too few samples to act on
+    assert pr._cache_rank("free-north", {}) == 0          # no profile at all -> fail open
+
+
+def test_cache_preference_reorders_only_within_a_cost_class():
+    # It must never promote a paid model over a free one — cost class still dominates.
+    tier = ["free-north", "free-pickle", "go-glm", "ant-sonnet"]
+    out = pr.order_tier(tier, {}, cache=PROFILE)
+    assert out.index("free-pickle") < out.index("free-north")   # caching free model first
+    assert [pr._cost_class(m) for m in out] == sorted(pr._cost_class(m) for m in out)
+
+
+def test_small_payloads_ignore_the_cache_preference():
+    # Nothing to cache on a short prompt, so a 0%-cache model is not worse and keeps its place.
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    small = pr.route("say hi", {}, av, {}, context_chars=40, cache=PROFILE)
+    assert pr._cost_class(small) == 0
+
+
+def test_session_sticks_then_releases_on_tier_change_or_death():
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    pr._SESSION_MODELS.clear()
+    k = pr.session_key([{"role": "user", "content": "a session"}])
+    first = pr.route("one", {}, av, {}, 200, None, k)
+    assert pr.route("two", {}, av, {}, 200, None, k) == first      # stays put
+    assert pr.route("x", {"tier": "reason"}, av, {}, 200, None, k) != first  # different work
+    dead = {first: {"ok": False}}
+    assert pr.route("one", {}, av, dead, 200, None, k) != first    # never pin a dead model
+
+
+def test_session_store_is_bounded():
+    pr._SESSION_MODELS.clear()
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    for i in range(pr._SESSION_MAX + 50):
+        pr.route("hi", {}, av, {}, 200, None, f"key{i}")
+    assert len(pr._SESSION_MODELS) <= pr._SESSION_MAX
+    pr._SESSION_MODELS.clear()
+
+
+def test_session_key_is_stable_as_the_conversation_grows():
+    first = {"role": "user", "content": "the opening turn"}
+    short = [first]
+    grown = [first, {"role": "assistant", "content": "reply"}, {"role": "user", "content": "more"}]
+    assert pr.session_key(short) == pr.session_key(grown)
+    assert pr.session_key([{"role": "assistant", "content": "no user turn"}]) is None

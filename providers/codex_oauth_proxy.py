@@ -172,9 +172,17 @@ def _consume(resp, model: str) -> dict:
                                                 "arguments": item.get("arguments", "")}})
         elif t == "response.completed":
             u = (ev.get("response") or {}).get("usage") or {}
+            # Carry the cache counters through. The Responses API reports them under
+            # input_tokens_details.cached_tokens; chat/completions calls the same thing
+            # prompt_tokens_details.cached_tokens. Dropping it made Codex look like it never
+            # cached, when in fact we simply were not reporting it — and the router's
+            # cache-aware ordering reads exactly this field.
+            cached = (u.get("input_tokens_details") or {}).get("cached_tokens")
             usage = {"prompt_tokens": u.get("input_tokens", 0),
                      "completion_tokens": u.get("output_tokens", 0),
                      "total_tokens": (u.get("input_tokens", 0) + u.get("output_tokens", 0))}
+            if cached is not None:
+                usage["prompt_tokens_details"] = {"cached_tokens": cached}
 
     msg = {"role": "assistant", "content": text or None}
     if tool_calls:

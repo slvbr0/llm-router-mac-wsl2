@@ -13,6 +13,7 @@ Cost bases: NIM free (load-variable) -> Zen per-token -> Copilot per-request cre
 So cheap/small prompts fall to Zen; big/hard prompts fall to Copilot.
 """
 
+import hashlib as _hashlib
 import json as _json
 import os
 import re
@@ -362,6 +363,99 @@ def load_health() -> Dict[str, Dict[str, Any]]:
         return {}
 
 
+# A model measured at or below this is treated as "does not cache". Deliberately near zero rather
+# than a quality bar: the aim is to demote models that cache NOTHING (free-north 0.0% over 50
+# samples, nim-step 0.0% over 28), not to rank the ones that merely cache less well.
+CACHE_MIN_HIT_PCT = 5.0
+CACHE_MIN_SAMPLES = 5
+
+
+def load_cache_profile() -> Dict[str, Dict[str, Any]]:
+    """Per-model prompt-cache hit rate from model_cache.yaml (written by scripts/cache_audit.sh).
+    Missing/broken -> {} (fail-open: nothing is penalised)."""
+    path = Path(os.environ.get("MODEL_CACHE_CONFIG", "model_cache.yaml"))
+    if not path.exists():
+        return {}
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data.get("models", {}) or {}
+    except Exception as exc:
+        verbose_logger.warning("PriorityRouter: cache profile load failed: %s", exc)
+        return {}
+
+
+def _cache_rank(model: str, profile: Dict[str, Dict[str, Any]]) -> int:
+    """0 = caches (or unknown), 1 = measured at ~zero.
+
+    Unknown ranks 0 on purpose. Penalising a model we have not measured would quietly bias routing
+    towards whatever happens to have traffic already, which is how a metric becomes self-fulfilling."""
+    row = profile.get(model)
+    if not row:
+        return 0
+    try:
+        # A probe is a direct measurement (send the same prefix twice, read cached_tokens), not a
+        # statistical sample, so it does not need a sample floor. Observed-traffic rows do: one
+        # unlucky request must not condemn a model.
+        if row.get("source") != "probe" and int(row.get("samples", 0)) < CACHE_MIN_SAMPLES:
+            return 0                      # too thin to act on
+        return 0 if float(row.get("hit_pct", 0)) > CACHE_MIN_HIT_PCT else 1
+    except (TypeError, ValueError):
+        return 0
+
+
+# --- session stickiness -------------------------------------------------------------------------
+# Switching model mid-conversation throws away the provider's prompt cache: the next turn re-runs
+# prefill over the whole payload. Measured switch rate on large requests is 15.6%, so ~84% of turns
+# already stay put — this protects that majority rather than creating it.
+#
+# In-memory and per-container on purpose. A restart forgetting every session is harmless (the next
+# turn simply re-decides), and it avoids a persistence layer for state whose worst-case loss is one
+# cache miss.
+_SESSION_MODELS: Dict[str, Tuple[str, str]] = {}     # key -> (tier, model)
+_SESSION_MAX = 512
+
+
+def session_key(messages: List[Dict[str, Any]]) -> Optional[str]:
+    """Stable identifier for a conversation: a hash of its FIRST user message.
+
+    The first turn does not change as the conversation grows, so the key survives the whole
+    session. Two conversations opening with identical text collide — harmless, since identical
+    openings route identically anyway."""
+    for m in messages:
+        if m.get("role") == "user":
+            text = extract_text(m.get("content", ""))
+            if text:
+                return _hashlib.sha256(text[:2000].encode("utf-8", "ignore")).hexdigest()[:16]
+    return None
+
+
+def _sticky_get(key: Optional[str], tier: str, availability: Dict[str, bool],
+                health: Dict[str, Any]) -> Optional[str]:
+    """The model this conversation is already on, if it is still a valid choice.
+
+    Deliberately re-checks availability and health: stickiness must not pin a session to a model
+    that has since died, which would turn one bad probe into a broken conversation."""
+    if not key:
+        return None
+    entry = _SESSION_MODELS.get(key)
+    if not entry:
+        return None
+    prev_tier, model = entry
+    if prev_tier != tier:
+        return None          # the work changed character; re-decide rather than force continuity
+    if model in PREMIUM_ONLY and tier not in ("frontier", "orchestrator"):
+        return None
+    return model if _model_ok(model, availability, health) else None
+
+
+def _sticky_put(key: Optional[str], tier: str, model: str) -> None:
+    if not key or not model:
+        return
+    if len(_SESSION_MODELS) >= _SESSION_MAX:
+        _SESSION_MODELS.pop(next(iter(_SESSION_MODELS)), None)   # drop oldest
+    _SESSION_MODELS[key] = (tier, model)
+
+
 def parse_request(prompt: str) -> Tuple[str, Dict[str, Any]]:
     directives: Dict[str, Any] = {"tier": None, "allowed": None, "denied": set(), "boost": False}
     for m in TAG_RE.finditer(prompt):
@@ -462,7 +556,8 @@ def _stability_rank(model: str) -> int:
 
 
 def order_tier(tier: List[str], health: Dict[str, Any],
-               native: Optional[Set[str]] = None, stability: bool = True) -> List[str]:
+               native: Optional[Set[str]] = None, stability: bool = True,
+               cache: Optional[Dict[str, Dict[str, Any]]] = None) -> List[str]:
     """Stable sort by (cost_class, native_rank, stability_rank, measured latency). Unprobed
     aliases keep their config position within the bucket (fail-open: no data -> no reordering).
 
@@ -476,6 +571,7 @@ def order_tier(tier: List[str], health: Dict[str, Any],
         lat = h.get("latency_ms")
         return (_cost_class(model),
                 0 if (native is None or model in native) else 1,
+                _cache_rank(model, cache) if cache else 0,
                 _stability_rank(model) if stability else 0,
                 lat if lat is not None else 10**9, idx)
     return [m for _, m in sorted(enumerate(tier), key=lambda im: key(im))]
@@ -499,9 +595,10 @@ def free_fallback(tier: List[str], min_rank: int = 0) -> List[str]:
 
 def pick_model(tier: List[str], availability: Dict[str, bool],
                health: Dict[str, Any], latency_sort: bool = True,
-               native: Optional[Set[str]] = None, stability: bool = True) -> Optional[str]:
+               native: Optional[Set[str]] = None, stability: bool = True,
+               cache: Optional[Dict[str, Dict[str, Any]]] = None) -> Optional[str]:
     # latency_sort=False for explicit-intent tiers (FRONTIER lists copilot first ON PURPOSE)
-    candidates = order_tier(tier, health, native, stability) if latency_sort else tier
+    candidates = order_tier(tier, health, native, stability, cache) if latency_sort else tier
     for model in candidates:
         if _model_ok(model, availability, health):
             return model
@@ -522,7 +619,9 @@ def classify(prompt: str) -> str:
 
 def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool],
           health: Optional[Dict[str, Any]] = None,
-          context_chars: Optional[int] = None) -> Optional[str]:
+          context_chars: Optional[int] = None,
+          cache: Optional[Dict[str, Dict[str, Any]]] = None,
+          sess: Optional[str] = None) -> Optional[str]:
     """`prompt` is the LAST USER MESSAGE — that is what carries the tags and the content markers.
     `context_chars` is the size of the WHOLE payload (system + history + tool results), which is
     what the model actually has to read. They are wildly different: a user typing "fix this" into
@@ -543,6 +642,9 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # 79,948). They returned *something*, so nothing errored and the quality loss was invisible.
     approx_tokens = (context_chars if context_chars is not None else len(prompt)) // CHARS_PER_TOKEN
     min_rank = TIER_CAPABILITY.get(tier, 0)
+    # Cache preference applies ONLY to large payloads. On a short prompt there is nothing to
+    # cache, so a model that never caches is not worse and must not be demoted for it.
+    cache_pref = cache if approx_tokens >= LARGE_PROMPT_TOKENS else None
     if approx_tokens >= LARGE_PROMPT_TOKENS:
         min_rank = max(min_rank, TIER_CAPABILITY["code"])
         tier_models = [m for m in tier_models
@@ -558,11 +660,20 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # CHEAP drops the stability tiebreak: everything in reach there is free, so one capable free
     # model is as good as another and raw speed is the only thing worth optimising. Elsewhere the
     # tiebreak still protects a session from load-variable NIM leading a long piece of work.
+    # Stay on the conversation's current model when it is still valid: switching would discard the
+    # provider's prompt cache and re-run prefill over the entire payload. An explicit tier tag has
+    # already been honoured above (it changes `tier`, which breaks stickiness by design).
+    sticky = _sticky_get(sess, tier, availability, health)
+    if sticky and sticky in tier_models:
+        verbose_logger.info("PriorityRouter: sticky %s -> %s", tier, sticky)
+        return sticky
+
     chosen = pick_model(tier_models, availability, health,
                         latency_sort=tier not in ("frontier", "orchestrator"),   # explicit-intent tiers keep config (quality) order
-                        native=native, stability=(tier != "cheap"))
+                        native=native, stability=(tier != "cheap"), cache=cache_pref)
     if chosen:
         verbose_logger.info("PriorityRouter: tier=%s -> %s", tier, chosen)
+        _sticky_put(sess, tier, chosen)
         return chosen
     for provider, models in PRIORITY_CHAIN.items():  # layer-5 cost-ordered chain
         for m in models:
@@ -607,9 +718,11 @@ class PriorityRouter(CustomLogger):
         # substitute, the served-model check would fail, and the model would be re-marked
         # unhealthy on every audit -- it could never recover once the provider restored it.
         health_probe = bool((data.get("metadata") or {}).get("health_probe"))
+        cache_profile = load_cache_profile()
+        sess = session_key(messages)
 
         if requested in AUTO_MODELS:
-            target = route(prompt, directives, availability, health, context_chars)
+            target = route(prompt, directives, availability, health, context_chars, cache_profile, sess)
             if target:
                 data["model"] = target
                 verbose_logger.info("PriorityRouter: auto -> %s", target)
@@ -618,7 +731,7 @@ class PriorityRouter(CustomLogger):
             unhealthy = (provider is not None and not availability.get(provider, True)) \
                 or (health.get(requested, {}).get("ok") is False)
             if unhealthy:
-                target = route(prompt, directives, availability, health, context_chars)
+                target = route(prompt, directives, availability, health, context_chars, cache_profile, sess)
                 if target:
                     verbose_logger.info("PriorityRouter: %s unavailable -> %s", requested, target)
                     data["model"] = target

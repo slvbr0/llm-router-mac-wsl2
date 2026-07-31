@@ -15,6 +15,9 @@ fi
 # The paid-trigger file is bind-mounted into the container; it must exist as a FILE before
 # `docker up` (a missing bind target makes Docker create a directory). Runtime-only, gitignored.
 [ -e .llmr-refresh-trigger ] || printf '0\n' > .llmr-refresh-trigger
+# Same reason: a missing bind target makes Docker create a DIRECTORY, and the router would
+# then fail to parse it on every request.
+[ -e model_cache.yaml ] || printf 'models: {}\n' > model_cache.yaml
 docker compose up -d >/dev/null 2>&1
 
 printf "   waiting for :4040 "
@@ -37,6 +40,10 @@ sh scripts/start_codex_proxy.sh
 
 echo "③ NIM latency audit…"
 sh scripts/nim_health.sh
+# Cache profile: which models actually reuse the provider prompt cache. Pure SQL over the
+# audit trail, no model calls, so it spends no quota. The router prefers a caching model for
+# LARGE payloads only.
+sh scripts/cache_audit.sh > /dev/null 2>&1 || true
 sh scripts/install_health_timer.sh   # 15-min background re-audit while session up
 
 if [ "$1" = "up" ]; then

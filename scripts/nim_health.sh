@@ -13,8 +13,17 @@ cd "$(dirname "$0")/.."
 KEY="$LITELLM_MASTER_KEY"
 URL="http://localhost:${LLMR_PORT:-4040}/v1/chat/completions"   # LLMR_PORT lets a staged stack audit itself
 MAX_MS="${NIM_LATENCY_MAX_MS:-8000}"
+# Native reasoners get a higher ceiling. They think by DEFAULT with no param to switch it off, so
+# this probe's wall-clock is mostly reasoning time, not lane health — and with max_tokens:16 they
+# burn the whole cap thinking and return finish_reason=length. Judging them by a non-reasoner's
+# threshold benches a perfectly healthy model for doing the one thing it is built to do (observed:
+# free-north and nim-step return completion_tokens=16 with content:"" on every probe). The token
+# check below is what actually proves liveness for them; latency just must not veto it.
+REASONER_MAX_MS="${NIM_REASONER_LATENCY_MAX_MS:-$(( MAX_MS * 2 ))}"
+# Single source of truth — importing beats a second copy of the list drifting out of sync.
+REASONERS=$(python3 -c 'import priority_router as p; print(" ".join(sorted(p.NATIVE_REASONERS)))' 2>/dev/null || echo "")
 # No point waiting far past the bench threshold — anything over it is benched anyway.
-CURL_TIMEOUT="${NIM_PROBE_TIMEOUT_S:-$(( MAX_MS / 1000 + 3 ))}"
+CURL_TIMEOUT="${NIM_PROBE_TIMEOUT_S:-$(( REASONER_MAX_MS / 1000 + 3 ))}"
 OUT="model_health.yaml"
 
 # FREE aliases only (NIM + Mistral free + zen-free). Latency-probing is for LOAD-VARIABLE free
@@ -36,6 +45,9 @@ trap 'rm -rf "$TMP"' EXIT
 
 probe() {
   a="$1"
+  # Per-alias ceiling: reasoners are allowed to think before we call them slow.
+  ceiling="$MAX_MS"
+  for r in $REASONERS; do [ "$r" = "$a" ] && ceiling="$REASONER_MAX_MS" && break; done
   # Two things this probe MUST do, or it certifies dead models as healthy:
   #
   #  1. "num_retries":0,"fallbacks":[] — with the fallback chain on, a dead alias is answered by
@@ -71,13 +83,14 @@ try:
 except Exception:
     print("", "0")' "$TMP/$a.body" 2>/dev/null || echo " 0")
 EOF
-  if [ "$code" = "200" ] && [ "$ms" -le "$MAX_MS" ] && [ "$served" = "$a" ] && [ "$filled" = "1" ]; then
+  if [ "$code" = "200" ] && [ "$ms" -le "$ceiling" ] && [ "$served" = "$a" ] && [ "$filled" = "1" ]; then
     ok=true
   else
     ok=false
     if [ "$code" = "200" ]; then
       [ "$served" != "$a" ] && code="200-served:${served:-none}"
       [ "$served" = "$a" ] && [ "$filled" = "0" ] && code="200-generated-nothing"
+      [ "$served" = "$a" ] && [ "$filled" = "1" ] && [ "$ms" -gt "$ceiling" ] && code="200-slow>${ceiling}ms"
     fi
   fi
   echo "$ok $ms $code" > "$TMP/$a"

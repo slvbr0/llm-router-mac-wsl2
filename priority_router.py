@@ -155,7 +155,7 @@ ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku e
 # DEFAULT with no param, and reasoning_effort only REDUCES that trace. Free, so never a reason to
 # hold back — always HIGH, and we inject NO param so their native max-depth reasoning is preserved
 # (a param here would shrink it for zero benefit). They exist only for the annotation + tiering.
-FREE_REASONERS = frozenset({"free-ling", "free-mimo", "free-north"})
+FREE_REASONERS = frozenset({"free-ling", "free-mimo", "free-north", "free-nemotron"})
 # Mistral reasoners (magistral / mistral-medium hybrid): reason natively on api.mistral.ai with NO
 # param — verified live, they 200 with reasoning inline (no separate reasoning_content field to
 # toggle). Treated like FREE_REASONERS: inject nothing, annotate high.
@@ -163,7 +163,13 @@ MIS_REASONERS = frozenset({"mis-medium", "mis-magistral"})
 # NIM native reasoners: step-3.7-flash emits a reasoning_content trace by DEFAULT (verified live:
 # 1505 chars with no param; enable_thinking barely changes it). So it is NOT in NIM_THINKING —
 # it needs no chat_template_kwargs toggle; treat it like the other native reasoners (inject none).
-NIM_NATIVE = frozenset({"nim-step"})
+# The nemotron family reasons by default too — verified live with the health-probe payload and no
+# param: nim-nemotron-super 59 chars of reasoning_content, nim-nemotron 44, free-nemotron 52, all
+# with finish_reason=length on a 16-token cap. They were missing here, which cost twice: the
+# annotation labelled them think:off while they were visibly reasoning, and the health probe judged
+# their thinking time against a non-reasoner's latency ceiling and benched them. nim-deepseek was
+# checked the same way and returns no reasoning_content, so it stays out.
+NIM_NATIVE = frozenset({"nim-step", "nim-nemotron", "nim-nemotron-super"})
 NATIVE_REASONERS = FREE_REASONERS | MIS_REASONERS | NIM_NATIVE
 # z.ai GLM reasoners on the Anthropic-compat endpoint: verified live they accept the Anthropic
 # thinking block {"type":"enabled","budget_tokens":N} and return a `thinking` content block. Same

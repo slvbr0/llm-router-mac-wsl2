@@ -159,6 +159,21 @@ def test_free_hosts_rank_zenfree_then_mistral_then_nim():
             pr._stability_rank("nim-glm")) == (0, 1, 2)
 
 
+def test_models_that_reason_natively_are_all_declared():
+    # Verified live with the health-probe payload and no param: each emits reasoning_content
+    # (nim-nemotron-super 59 chars, free-nemotron 52, nim-nemotron 44, all finish_reason=length on
+    # a 16-token cap). Being absent from this set cost twice -- the banner said think:off while the
+    # model was visibly reasoning, and nim_health.sh judged their thinking time against a
+    # non-reasoner's latency ceiling and benched them as unhealthy.
+    for m in ("free-ling", "free-mimo", "free-north", "free-nemotron",
+              "nim-step", "nim-nemotron", "nim-nemotron-super",
+              "mis-medium", "mis-magistral"):
+        assert m in pr.NATIVE_REASONERS, f"{m} reasons natively but is not declared"
+        assert m in pr.ALL_THINKING, f"{m} would be annotated think:off"
+    # Checked the same way and returns no reasoning_content -- must NOT get the reasoner ceiling.
+    assert "nim-deepseek" not in pr.NATIVE_REASONERS
+
+
 def test_an_unhealthy_zenfree_does_not_block_the_next_free_host():
     # Reliability order must not become a dead end: rank 0 that is down is skipped, not waited on.
     health = {"free-north": {"ok": False, "latency_ms": 900},

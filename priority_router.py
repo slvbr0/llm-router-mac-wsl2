@@ -602,16 +602,24 @@ def _cost_class(model: str) -> int:
 
 
 def _stability_rank(model: str) -> int:
-    """Within the free class (0), prefer the STABLE hosted free providers over load-variable NIM.
-    Mistral + opencode-Zen-free have steady latency; NIM free is load-variable and flaps, which
-    makes a session feel unreliable. So among free models: Mistral/zen-free first, NIM after.
-    (Only breaks ties inside one cost class — cost_class still dominates, so this never lifts a
-    free model above a cheaper one or vice-versa.)"""
+    """Within the free class (0), order free hosts by how dependable they are: zen-free -> Mistral
+    -> NIM. This is a RELIABILITY order, not a speed one, and it deliberately outranks measured
+    latency in order_tier — a host that is 1s faster on a good minute is worth nothing against one
+    that 529s or stalls for 11s, both of which NIM did repeatedly in one afternoon while zen-free
+    held ~2s. Mistral sits in the middle: steady when it works, but its key is a single point of
+    failure that has lapsed before (four 401s until it was replaced).
+
+    Giving zen-free and Mistral the same rank was the bug this replaces: they tied, so latency
+    broke the tie and whichever happened to be faster that minute led — exactly the flapping this
+    is meant to prevent. Only breaks ties inside one cost class; cost_class still dominates, so
+    this never lifts a free model above a cheaper one or vice-versa."""
     p = MODEL_PROVIDER.get(model, "")
-    if p == "mistral" or model.startswith("free-"):
-        return 0        # stable free — preferred
+    if model.startswith("free-"):
+        return 0        # opencode Zen free tier — steadiest host, leads whenever it is healthy
+    if p == "mistral":
+        return 1        # Mistral free — steady, but key-dependent
     if p == "nim":
-        return 1        # NIM free is load-variable — used after Mistral/zen-free
+        return 2        # NIM free — load-variable, flaps; last among free
     return 0            # non-free providers: no intra-class stability preference
 
 
@@ -718,9 +726,12 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
     # (The brains grok/kimi-k3 are no longer boost-escalated here: they are RESTRICTED_AUTO —
     # explicit-only — so [BOOST] on the orchestrator tier just raises thinking depth on the
     # high-quota capables, never spends a low-quota brain that could overflow GO -> paid Zen.)
-    # CHEAP drops the stability tiebreak: everything in reach there is free, so one capable free
-    # model is as good as another and raw speed is the only thing worth optimising. Elsewhere the
-    # tiebreak still protects a session from load-variable NIM leading a long piece of work.
+    # The stability tiebreak applies to EVERY tier, CHEAP included. It used to be dropped there on
+    # the theory that one free model is as good as another so raw speed should win. Live evidence
+    # says otherwise: in a single afternoon NIM served 529s on deepseek-flash, 11s timeouts on
+    # minimax/llama and 8.2s on deepseek, while Mistral and zen-free held ~1-2.4s throughout. A
+    # cheap prompt answered 1s faster is worth nothing next to one that fails or stalls, and NIM
+    # still leads whenever it is genuinely the fastest STABLE option — latency is the next key.
     # Stay on the conversation's current model when it is still valid: switching would discard the
     # provider's prompt cache and re-run prefill over the entire payload. An explicit tier tag has
     # already been honoured above (it changes `tier`, which breaks stickiness by design).
@@ -731,7 +742,7 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
 
     chosen = pick_model(tier_models, availability, health,
                         latency_sort=tier not in ("frontier", "orchestrator"),   # explicit-intent tiers keep config (quality) order
-                        native=native, stability=(tier != "cheap"), cache=cache_pref)
+                        native=native, stability=True, cache=cache_pref)
     if chosen:
         verbose_logger.info("PriorityRouter: tier=%s -> %s", tier, chosen)
         _sticky_put(sess, tier, chosen)

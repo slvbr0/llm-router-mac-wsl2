@@ -15,20 +15,26 @@ def route(prompt, avail=None, health=None):
 
 
 def test_short_prompt_is_cheap_tier_and_free():
-    # CHEAP drops the stability tiebreak — everything reachable there is free, so raw latency
-    # decides. With no health data every free model ties and config order wins.
+    # CHEAP keeps the stability tiebreak like every other tier, so a stable-free host leads even
+    # here. With no health data the stable group ties and config order decides inside it.
     got = route("Say hi")
     assert pr._cost_class(got) == 0, f"cheap picked a non-free model: {got}"
-    assert got == "nim-llama"
+    assert pr._stability_rank(got) == 0, f"cheap led with load-variable {got}"
 
 
-def test_cheap_picks_the_fastest_free_model_whatever_the_provider():
-    # The point of dropping stability in CHEAP: a fast NIM beats a slower zen-free, and vice
-    # versa. One capable free model is as good as another when the work is trivial.
+def test_cheap_prefers_a_stable_free_host_even_when_nim_is_faster():
+    # The reliability rule that replaced "fastest free wins" in CHEAP. Measured live: NIM served
+    # 529s and 8-11s stalls while Mistral/zen-free held ~1-2.4s. A trivial prompt answered a
+    # second sooner is worth nothing against one that stalls, so a fast NIM does NOT jump the
+    # queue over a slower stable host.
     fast_nim = {"nim-llama": {"ok": True, "latency_ms": 600},
                 "free-deepseek": {"ok": True, "latency_ms": 2200},
                 "free-pickle": {"ok": True, "latency_ms": 2100}}
-    assert route("Say hi", health=fast_nim) == "nim-llama"
+    got = route("Say hi", health=fast_nim)
+    assert got != "nim-llama"
+    assert pr._stability_rank(got) == 0
+
+    # Latency is still the next key, so it decides WITHIN the stable group.
     fast_zen = {"nim-llama": {"ok": True, "latency_ms": 3000},
                 "nim-deepseek-flash": {"ok": True, "latency_ms": 3200},
                 "free-deepseek": {"ok": True, "latency_ms": 700}}
@@ -140,16 +146,26 @@ def test_trigger_free_refresh_writes_when_writable(tmp_path, monkeypatch):
     assert trig.exists() and trig.read_text().strip().isdigit()
 
 
-def test_stability_mistral_and_zenfree_beat_nim_within_free():
-    # Within the free class, Mistral + zen-free are preferred over load-variable NIM even when NIM
-    # is faster (stability > raw speed for a good session).
+def test_free_hosts_rank_zenfree_then_mistral_then_nim():
+    # Reliability order, and it outranks measured latency: NIM fastest here and still last, and
+    # zen-free leads Mistral even on identical latency (they used to tie, so whichever was quicker
+    # that minute led — the flapping this ordering exists to stop).
     health = {"nim-glm": {"ok": True, "latency_ms": 500},        # NIM fast...
               "mis-large": {"ok": True, "latency_ms": 3000},    # ...Mistral slower...
               "free-north": {"ok": True, "latency_ms": 3000}}
     out = pr.order_tier(["nim-glm", "mis-large", "free-north"], health)
-    assert out.index("mis-large") < out.index("nim-glm")        # stable free first...
-    assert out.index("free-north") < out.index("nim-glm")    # ...despite NIM being faster
-    assert pr._stability_rank("mis-large") == 0 and pr._stability_rank("nim-glm") == 1
+    assert out == ["free-north", "mis-large", "nim-glm"]
+    assert (pr._stability_rank("free-north"), pr._stability_rank("mis-large"),
+            pr._stability_rank("nim-glm")) == (0, 1, 2)
+
+
+def test_an_unhealthy_zenfree_does_not_block_the_next_free_host():
+    # Reliability order must not become a dead end: rank 0 that is down is skipped, not waited on.
+    health = {"free-north": {"ok": False, "latency_ms": 900},
+              "mis-large": {"ok": True, "latency_ms": 3000},
+              "nim-glm": {"ok": True, "latency_ms": 500}}
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    assert pr.pick_model(["free-north", "mis-large", "nim-glm"], av, health) == "mis-large"
 
 
 def test_order_tier_go_never_before_free():
@@ -566,7 +582,7 @@ def test_orch_l2_reasoners_get_high_others_off():
 
 def test_role_tags_map_to_worker_tiers():
     # Stability-first: workers land on the stable-free leader of their tier (zen-free), not NIM.
-    assert route("[SCOUT] list the files in this repo") == "nim-llama"      # cheap
+    assert route("[SCOUT] list the files in this repo") == "free-deepseek"  # cheap
     assert route("[ANALYST] interpret these benchmark numbers") == "free-ling"  # reason
     assert route("[VERIFIER] check this claim against the source") == "free-ling"
     assert route("[AUDITOR] does the code match the spec") == "free-ling"

@@ -90,14 +90,24 @@ section.
 NIM is free but throughput swings with NVIDIA's shared queue, so latency is the one
 thing the router can't assume. The audit measures it; the router consumes it.
 
-- Probes **FREE aliases only** (NIM + Mistral free + `free-*`, ~21) **in parallel**. Flat lanes (GO, Codex, Anthropic, z.ai) are deliberately NOT probed — a probe spends the quota they are held in reserve for, and a subscription that authenticates works. Router sorts each tier by (cost class, native, stability, measured latency); CHEAP drops the stability term so raw speed decides among free models; `[FRONTIER]`/`[ORCH]` keep config (quality) order. 15-min session refresher: `scripts/install_health_timer.sh` (launchd blocked by TCC on ~/Documents). opencode slash-commands: /refresh /current /info-* /speed /think /performance.
+- Probes **FREE aliases only** (NIM + Mistral free + `free-*`, ~21) **in parallel**. Flat lanes (GO, Codex, Anthropic, z.ai) are deliberately NOT probed — a probe spends the quota they are held in reserve for, and a subscription that authenticates works. Router sorts each tier by (cost class, native, cache, stability, measured latency); `[FRONTIER]`/`[ORCH]` keep config (quality) order. 15-min session refresher: `scripts/install_health_timer.sh` (launchd blocked by TCC on ~/Documents). opencode slash-commands: /refresh /current /info-* /speed /think /performance.
+- **Free hosts are ordered by reliability, not speed:** `free-*` (Zen) → `mis-*` (Mistral) → `nim-*` (NIM). This applies in *every* tier, CHEAP included, and outranks measured latency — latency only orders models *within* a band. Measured in one afternoon: NIM served 529s, 19s timeouts and an 8.2s stall while Zen held ~2s and Mistral ~1.2s. Mistral sits in the middle because its key is a single point of failure that has lapsed before. An `ok:false` host is still skipped, so the order never becomes a dead end.
 - Probes every alias **in parallel** (`&` + `wait`) → wall-clock ≈ slowest single
   probe (~11s), not the sum.
 - `max_tokens: 16` and a "reply OK" prompt — **not** `max_tokens: 1`, which
   false-negatives reasoning models (GLM, DeepSeek-pro emit thinking tokens and stall
   under a 1-token cap).
-- `curl -m` capped just past the bench threshold (`NIM_LATENCY_MAX_MS/1000 + 3`) — no
-  point waiting 30s for a model that's benched at 8s.
+- **Native reasoners get their own ceiling** (`NIM_REASONER_LATENCY_MAX_MS`, default 2×).
+  They think by default with no param to switch it off, so the probe's wall-clock is
+  mostly reasoning time rather than lane health — and on a 16-token cap they return
+  `finish_reason=length` with `content:""`. Judging that against a non-reasoner's limit
+  benches a healthy model for doing the one thing it exists to do (`nim-nemotron-super`
+  15788ms and `free-nemotron` 14310ms were both marked dead this way). The alias list is
+  imported from `priority_router.NATIVE_REASONERS`, never copied, so it cannot drift.
+- `curl -m` capped just past the widest bench threshold — no point waiting 30s for a
+  model that's already benched.
+- A slow bench reports as `200-slow>Nms`, not a bare `200`. "Healthy 200 but ok:false"
+  with no explanation is what made this class of bug hard to see.
 - Writes `model_health.yaml`; router skips `ok:false` NIM models. Re-run anytime.
 
 ---

@@ -113,6 +113,8 @@ The same tree runs on macOS and on Linux/WSL2 — the OAuth shims pick their bin
 - The compose **service** is `litellm`; `litellm-proxy` is only the `container_name`. `docker compose up -d --force-recreate litellm` is the one that re-reads `docker-compose.yml`.
 - `docker start` does **not** re-read compose. If you add a mount and restart with `docker start`, the container comes up healthy without it and the router silently fails open — which looks exactly like the feature not working. `docker inspect <name> --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}'` is the check.
 
+On WSL2 specifically: Windows reaches the router at `localhost:4040` through WSL's localhost forwarding, the OAuth shims need systemd user units to survive a restart, and two failure modes — a stack started from the wrong checkout, and Postgres keeping the password it was first initialised with — come up healthy while serving stale config. [docs/WSL2.md](docs/WSL2.md) covers all of it.
+
 ## Use it with
 
 Claude Code, Codex, and opencode have all been run against this router. API key is your `LITELLM_MASTER_KEY`, model name is `auto`.

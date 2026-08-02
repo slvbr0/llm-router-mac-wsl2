@@ -100,7 +100,7 @@ AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax",
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
 # zen-gpt dropped (dead: 401). Config order = intent (frontier is not latency-sorted).
-FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "zai-52", "go-deepseek-flash", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "co-opus", "co-sonnet", "co-gemini",
+FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "go-deepseek-flash", "zai-52", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "co-opus", "co-sonnet", "co-gemini",
                  "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free)/zai-52(flat) reasoners between free NIM and GO
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
@@ -136,9 +136,14 @@ PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "ant-opus", "ant-fable
 # excluded (RESTRICTED_AUTO).
 ORCHESTRATOR_TIER = ["free-deepseek",                                 # DeepSeek V4 Flash 0731, free
                      "mis-medium", "nim-glm",                         # free reasoners
+                     # 0731's flat twin heads the FLAT block in every tier: same model as the free
+                     # leader, so when free capacity is exhausted the answer keeps its quality
+                     # instead of dropping to a different family. It is also the cheapest flat lane
+                     # (GO class 1 vs z.ai 4), so "GO LAST" does not apply to it — that rule exists
+                     # to protect GO quota from the expensive brains further down this list.
+                     "go-deepseek-flash",
                      "zai-52",                                          # z.ai flat
                      "ant-sonnet", "ant-opus",                          # Anthropic Max flat
-                     "go-deepseek-flash",                               # 0731's flat twin, heads GO
                      "go-glm", "go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo"]  # zen GO LAST
 
 # --- Thinking-capable model sets and budget table ---

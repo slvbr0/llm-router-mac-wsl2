@@ -188,6 +188,18 @@ def test_free_ladder_is_new_deepseek_then_zenfree_then_mistral_then_nim():
     assert [pr._cost_class(m) for m in out] == sorted(pr._cost_class(m) for m in out)
 
 
+def test_go_twin_heads_the_flat_block_in_every_tier():
+    # When free capacity is exhausted, the first thing that costs anything must be the 0731 flat
+    # twin — same model as the free leader, and the cheapest flat lane (GO class 1). Frontier and
+    # orchestrator are config-ordered rather than cost-sorted, so they only satisfy this if the
+    # alias is physically placed ahead of z.ai (class 4); they did not, which this pins.
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    allfree = {m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 0}
+    for tier in ("cheap", "general", "code", "reason", "agent", "frontier", "orchestrator"):
+        got = pr.route("x", {"tier": tier}, av, allfree)
+        assert got == "go-deepseek-flash", f"{tier} spent {got} (class {pr._cost_class(got)}) first"
+
+
 def test_old_deepseek_builds_are_kept_but_never_lead():
     # The old relays stay wired (they are still capacity) but must not outrank the new build.
     # NIM's same-named deepseek-v4-flash answered "1, 2" to a question the new one gets right.

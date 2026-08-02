@@ -66,6 +66,43 @@ provider doesn't call). **Claude (opus/sonnet/haiku) and Gemini work.** So
 
 ---
 
+## 2b. Four lanes share one model name, and only two are the new build
+
+DeepSeek V4 Flash 0731 arrived on opencode's free and GO lanes (the *models hosted in China*
+toggle). Four aliases carry the name `deepseek-v4-flash` and **no version identifier is exposed
+anywhere** — `/models` has no metadata, `system_fingerprint` is absent, and asking the model
+returns *"I'm GPT-4, knowledge cutoff October 2023"*. Identify it by behaviour instead:
+
+| alias | upstream | new build? | evidence |
+|---|---|---|---|
+| `free-deepseek` | `deepseek-v4-flash-free` (Zen free) | **yes** | DeepSeek-native usage fields; 111–277 reasoning tokens |
+| `go-deepseek-flash` | `deepseek-v4-flash` (GO flat) | **yes** | same |
+| *(unwired)* | `deepseek-v4-flash` (Zen per-token) | no | no native fields, no reasoning tokens |
+| `nim-deepseek-flash` | `deepseek-ai/deepseek-v4-flash` (NIM) | no | no reasoning; **answers a checkable question wrong** |
+
+Two independent signals separate them:
+
+1. **DeepSeek-native usage accounting** — `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`.
+   These are not in the OpenAI schema, so they only survive when the request reaches DeepSeek's own
+   API. The relays strip them.
+2. **It reasons.** The new build emits `reasoning_content` with no parameter sent; the relays emit
+   none.
+
+Confirmed behaviourally: asked to count the r's in *strawberry* and *raspberry*, both new lanes
+answer **3 3**; NIM's identically-named model answers **1, 2**.
+
+The old builds are **kept, not deleted** — they are still capacity. They simply rank last among
+free (`_stability_rank`) and can never lead.
+
+Two consequences worth knowing. `go-deepseek-flash` is **not** in `GO_THINKING` even though GO
+accepts `reasoning_effort` on it: sending `high` measured *fewer* reasoning tokens than sending
+nothing (12 vs 15), so the knob only shrinks the native trace. And on an **open-ended** prompt at a
+tier with a high thinking budget it can spend the entire allowance on `reasoning_content` and
+return no visible text — not a defect of this model, `nim-glm` does the same on the same prompt.
+Bounded prompts terminate normally.
+
+---
+
 ## 3. Router logic (`priority_router.py`)
 
 A LiteLLM `async_pre_call_hook`. Per prompt: parse tags → apply availability +
@@ -125,7 +162,8 @@ NIM is free but throughput swings with NVIDIA's shared queue, so latency is the 
 thing the router can't assume. The audit measures it; the router consumes it.
 
 - Probes **FREE aliases only** (NIM + Mistral free + `free-*`, ~21) **in parallel**. Flat lanes (GO, Codex, Anthropic, z.ai) are deliberately NOT probed — a probe spends the quota they are held in reserve for, and a subscription that authenticates works. Router sorts each tier by (cost class, native, cache, stability, measured latency); `[FRONTIER]`/`[ORCH]` keep config (quality) order. 15-min session refresher: `scripts/install_health_timer.sh` (launchd blocked by TCC on ~/Documents). opencode slash-commands: /refresh /current /info-* /speed /think /performance.
-- **Free hosts are ordered by reliability, not speed:** `free-*` (Zen) → `mis-*` (Mistral) → `nim-*` (NIM). This applies in *every* tier, CHEAP included, and outranks measured latency — latency only orders models *within* a band. Measured in one afternoon: NIM served 529s, 19s timeouts and an 8.2s stall while Zen held ~2s and Mistral ~1.2s. Mistral sits in the middle because its key is a single point of failure that has lapsed before. An `ok:false` host is still skipped, so the order never becomes a dead end.
+- **DeepSeek V4 Flash 0731 is the default everywhere.** `free-deepseek` (Zen free, $0) leads all seven tiers while healthy; `go-deepseek-flash` (GO flat) heads the flat block in all seven, so exhausting free capacity keeps the *same model* instead of dropping to another family. Four lanes carry this model's name and only two are the new build — see §2b below.
+- **Free hosts are ordered by reliability, not speed:** the new DeepSeek → the rest of `free-*` (Zen) → `mis-*` (Mistral) → `nim-*` (NIM). This applies in *every* tier, CHEAP included, and outranks measured latency — latency only orders models *within* a band. Measured in one afternoon: NIM served 529s, 19s timeouts and an 8.2s stall while Zen held ~2s and Mistral ~1.2s. Mistral sits in the middle because its key is a single point of failure that has lapsed before. An `ok:false` host is still skipped, so the order never becomes a dead end.
 - Probes every alias **in parallel** (`&` + `wait`) → wall-clock ≈ slowest single
   probe (~11s), not the sum.
 - `max_tokens: 16` and a "reply OK" prompt — **not** `max_tokens: 1`, which

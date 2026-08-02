@@ -753,14 +753,23 @@ def route(prompt: str, directives: Dict[str, Any], availability: Dict[str, bool]
         verbose_logger.info("PriorityRouter: tier=%s -> %s", tier, chosen)
         _sticky_put(sess, tier, chosen)
         return chosen
-    for provider, models in PRIORITY_CHAIN.items():  # layer-5 cost-ordered chain
-        for m in models:
-            # The desperation walk must not reach a scarce brain on an everyday prompt: that is
-            # precisely how kimi-k3 used to answer routine requests at 63k tokens. Frontier may.
-            if m in PREMIUM_ONLY and tier not in ("frontier", "orchestrator"):
-                continue
-            if _model_ok(m, availability, health):
-                return m
+    # Layer 5, the desperation walk: nothing in the tier (nor the borrowed free tail) was
+    # available. Sort by cost class rather than trusting PRIORITY_CHAIN's dict order — that order
+    # groups by PROVIDER, and provider order is not cost order: it reaches z.ai (4) before GO (1),
+    # and Copilot (6) before Anthropic (3) and Codex (2). This is the one path that can pick a lane
+    # the tiers never offered, so it is exactly where a silent inversion is most expensive. The
+    # index keeps each provider's own preference order intact inside a class.
+    walk = sorted(
+        ((m, i) for i, m in enumerate(m for models in PRIORITY_CHAIN.values() for m in models)),
+        key=lambda mi: (_cost_class(mi[0]), mi[1]),
+    )
+    for m, _ in walk:
+        # The desperation walk must not reach a scarce brain on an everyday prompt: that is
+        # precisely how kimi-k3 used to answer routine requests at 63k tokens. Frontier may.
+        if m in PREMIUM_ONLY and tier not in ("frontier", "orchestrator"):
+            continue
+        if _model_ok(m, availability, health):
+            return m
     return None
 
 

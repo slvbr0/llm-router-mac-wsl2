@@ -83,6 +83,40 @@ simply stops preferring models that cache, and everything still answers. Verify 
 mount rather than the container's health — see the WSL2 note in the README install
 section.
 
+### Three places cost order is decided, not one
+
+Per-request selection is only the first. Each of the others fires on a different
+failure and can invert the cascade on its own:
+
+| path | when it runs | ordered by |
+|---|---|---|
+| tier selection (`order_tier`) | every request | `_cost_class`, then native / cache / stability / latency |
+| desperation walk (layer 5) | nothing in the tier or the borrowed free tail is available | `_cost_class` — **explicitly sorted, not `PRIORITY_CHAIN` order** |
+| LiteLLM `router_settings.fallbacks` | the chosen deployment errors mid-call | hand-written per-alias lists in `config.yaml` |
+
+`PRIORITY_CHAIN` groups aliases by **provider**, and provider order is not cost
+order — iterating it reaches z.ai (4) before GO (1), and Copilot (6) before
+Anthropic (3) and Codex (2). The walk therefore sorts by `_cost_class` and treats
+the dict as nothing more than the source of candidates; the original index breaks
+ties so each provider keeps its own preference order inside a class.
+
+The static fallback chains are the easiest to get wrong, because nothing about a
+healthy router reveals them — they only run when a call fails. They must stay
+cost-ascending, and a chain ending at Copilot must try a flat lane (GO, Codex,
+Anthropic) first, or a transient 503 on a free model escapes straight to
+per-request credit while flat subscription quota sits unused. Both properties are
+asserted in `tests/test_priority_router.py`
+(`test_desperation_walk_is_cost_ordered_not_provider_ordered`,
+`test_fallback_chains_never_skip_a_cheaper_lane_to_reach_copilot`), so a hand edit
+that breaks either fails the suite instead of surfacing as a bill.
+
+A related trap sits on the caller's side: a request body carrying
+`"fallbacks": []` overrides the config chain and makes that alias hard-fail rather
+than degrade. The shape is deliberate in `scripts/nim_health.sh` — a probe answered
+by a substitute would certify a dead model as healthy — but it should not be copied
+into ordinary clients. `Fallbacks=[]` in an error means the request asked for that;
+it does not mean the chain is missing.
+
 ---
 
 ## 4. Health-gate + latency routing (`scripts/nim_health.sh`)

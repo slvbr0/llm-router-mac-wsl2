@@ -1068,3 +1068,53 @@ def test_small_anthropic_payloads_skip_caching():
     # Below Anthropic's minimum cacheable prefix a breakpoint is rejected, not merely useless.
     data = {"messages": [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]}
     assert pr.apply_anthropic_cache(data, "ant-sonnet", 100) == 0
+
+
+def test_desperation_walk_is_cost_ordered_not_provider_ordered():
+    """Layer 5 must not inherit PRIORITY_CHAIN's dict order. That order groups by provider, and
+    provider order is not cost order — it reaches z.ai (4) before GO (1) and Copilot (6) before
+    Anthropic (3) and Codex (2). With every tier empty the walk is the only thing choosing a lane,
+    so an inversion here spends the dearest lane while flat quota sits unused."""
+    saved = dict(pr.TIER_MAP)
+    try:
+        for k in pr.TIER_MAP:
+            pr.TIER_MAP[k] = []
+        avail = {p: True for p in pr.PRIORITY_CHAIN}
+        got = pr.route("anything", {"tier": "general"}, avail, {})
+        assert got is not None, "walk returned nothing while every provider was available"
+        assert pr._cost_class(got) == 0, (
+            f"walk chose {got} (class {pr._cost_class(got)}) while a free lane was available"
+        )
+        # Free lanes gone: it must take the cheapest remaining class, not the dict's next provider
+        # — GO (1) before z.ai (4), never Copilot (6) while Codex (2) is up.
+        avail["nim"] = avail["mistral"] = False
+        avail["zen"] = False          # drops both the free- and go- aliases in that provider
+        got = pr.route("anything", {"tier": "general"}, avail, {})
+        assert pr._cost_class(got) == 2, (
+            f"walk chose {got} (class {pr._cost_class(got)}) instead of the Codex flat lane"
+        )
+    finally:
+        pr.TIER_MAP.update(saved)
+
+
+def test_fallback_chains_never_skip_a_cheaper_lane_to_reach_copilot():
+    """LiteLLM's static fallbacks fire on a mid-call error, independently of tier selection. They
+    used to run free -> GO -> Copilot, so an error escaped to per-request credit while the flat
+    Codex lane (class 2) was not a target in any of the 55 chains."""
+    import pathlib
+
+    import yaml
+
+    cfg = yaml.safe_load(
+        (pathlib.Path(__file__).resolve().parents[1] / "config.yaml").read_text(encoding="utf-8")
+    )
+    chains = cfg["router_settings"]["fallbacks"]
+    assert chains, "no fallback chains configured"
+    for group in chains:
+        for alias, members in group.items():
+            classes = [pr._cost_class(m) for m in members]
+            assert classes == sorted(classes), f"{alias} fallback is not cost-ascending: {members}"
+            if 6 in classes:  # ends at Copilot -> a cheaper flat lane must come first
+                assert any(c in (1, 2, 3) for c in classes), (
+                    f"{alias} escapes to Copilot without trying a flat lane: {members}"
+                )

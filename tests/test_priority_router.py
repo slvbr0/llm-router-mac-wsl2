@@ -1140,6 +1140,26 @@ def test_small_anthropic_payloads_skip_caching():
     assert pr.apply_anthropic_cache(data, "ant-sonnet", 100) == 0
 
 
+def test_explicit_intent_tiers_are_cost_ascending():
+    """frontier and orchestrator are picked with latency_sort=False, so their literal list order
+    IS the routing order — unlike the five sorted tiers, where cost class is re-derived per
+    request and a mis-ordered list is harmless. A class-4 alias sitting above a class-1 one here
+    spends the dearer subscription first, on a different model, for nothing.
+
+    LAST_RESORT_BRAINS are the deliberate exception: class 1, pinned at the tail because a GO 429
+    when the plan is saturated overflows to per-token Zen billing."""
+    for tier in ("frontier", "orchestrator"):
+        members = [m for m in pr.TIER_MAP[tier] if m not in pr.LAST_RESORT_BRAINS]
+        classes = [pr._cost_class(m) for m in members]
+        assert classes == sorted(classes), (
+            f"{tier} is not cost-ascending: "
+            + ", ".join(f"{m}({c})" for m, c in zip(members, classes))
+        )
+    # The brains must stay last, or this tier starts spending scarce quota on routine frontier work.
+    tail = [m for m in pr.FRONTIER_TIER if m in pr.LAST_RESORT_BRAINS]
+    assert pr.FRONTIER_TIER[-len(tail):] == tail, "LAST_RESORT_BRAINS must remain the frontier tail"
+
+
 def test_desperation_walk_is_cost_ordered_not_provider_ordered():
     """Layer 5 must not inherit PRIORITY_CHAIN's dict order. That order groups by provider, and
     provider order is not cost order — it reaches z.ai (4) before GO (1) and Copilot (6) before

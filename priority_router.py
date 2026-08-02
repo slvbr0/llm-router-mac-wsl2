@@ -104,9 +104,14 @@ AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax",
 # IS the routing order — a class-4 model listed above a class-1 one is spent first, on a different
 # model, for no gain. Kept cost-ascending by hand, with quality order preserved inside each class,
 # and asserted by test_explicit_intent_tiers_are_cost_ascending so an edit cannot silently invert
-# it. The two brains are the deliberate exception: class 1, pinned last (see LAST_RESORT_BRAINS).
-FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "go-deepseek-flash", "go-glm", "go-qwen-max", "cod-sol", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
-                 "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free) then GO flat, Codex, Anthropic Max, z.ai, Copilot last
+# it. TWO deliberate exceptions, both named in that test:
+#   * go-deepseek-flash (class 1) sits at slot 2, ahead of the free models. These are the tiers
+#     that rank by quality, GO is flat so its marginal call costs nothing, and on published agentic
+#     scores the 0731 flash beats the previous generation's pro (Terminal-Bench 82.7 vs 72.1).
+#     Keeping the best model on the hardest work beats dropping to a weaker free reasoner.
+#   * the two brains: class 1, pinned last (see LAST_RESORT_BRAINS).
+FRONTIER_TIER = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "mis-medium", "go-glm", "go-qwen-max", "cod-sol", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
+                 "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # 0731 pair, then free, then GO flat, Codex, Anthropic Max, z.ai, Copilot last
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
 # Max flat-rate, GO reasoners, nim-glm free) carry every verdict. The near-frontier brains
@@ -139,19 +144,22 @@ PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "ant-opus", "ant-fable
 # down — because a GO 429 when saturated overflows to per-token Zen. zen paid is never in the tier
 # (reached only via a GO model's own fallback if literally everything else is unavailable). Brains
 # excluded (RESTRICTED_AUTO).
-ORCHESTRATOR_TIER = ["free-deepseek",                                 # DeepSeek V4 Flash 0731, free
+ORCHESTRATOR_TIER = [# DeepSeek V4 Flash 0731 takes BOTH lead slots here, free first then its flat
+                     # twin — and note this is the one place a flat model is deliberately ranked
+                     # ahead of free ones. frontier/orchestrator are quality-ordered, not
+                     # cost-sorted, and on published agentic scores this flash beats the previous
+                     # generation's pro (Terminal-Bench 82.7 vs 72.1). GO is flat, so the marginal
+                     # request costs nothing anyway; spending a GO call to keep the best model on
+                     # the tier's hardest work beats dropping to a weaker free one. "GO LAST" still
+                     # governs everything below — that rule protects GO quota from the expensive
+                     # brains, not from the cheapest model on the plan.
+                     "free-deepseek", "go-deepseek-flash",
                      "mis-medium", "nim-glm",                         # free reasoners
-                     # 0731's flat twin heads the FLAT block in every tier: same model as the free
-                     # leader, so when free capacity is exhausted the answer keeps its quality
-                     # instead of dropping to a different family. It is also the cheapest flat lane
-                     # (GO class 1 vs z.ai 4), so "GO LAST" does not apply to it — that rule exists
-                     # to protect GO quota from the expensive brains further down this list.
-                     "go-deepseek-flash",
-                     # The rest of GO follows immediately, for the same reason: class 1 is the
-                     # cheapest flat lane, so putting Anthropic (3) or z.ai (4) ahead of it spent a
-                     # dearer subscription first. "GO LAST" was aimed at the scarce brains, which
-                     # are excluded from this tier entirely (LAST_RESORT_BRAINS) — it was never a
-                     # reason to rank the high-quota GO workers below flat lanes that cost more.
+                     # Then the rest of GO: class 1 is the cheapest flat lane, so putting
+                     # Anthropic (3) or z.ai (4) ahead of it spent a dearer subscription first.
+                     # "GO LAST" was aimed at the scarce brains, which are excluded from this tier
+                     # entirely (LAST_RESORT_BRAINS) — it was never a reason to rank the high-quota
+                     # GO workers below flat lanes that cost three or four times as much.
                      "go-glm", "go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo",
                      "ant-sonnet", "ant-opus",                          # Anthropic Max flat (3)
                      "zai-52"]                                          # z.ai flat (4), dearest here

@@ -562,14 +562,17 @@ def test_free_reasoners_are_in_reason_tier():
 # --- orchestrator/auditor tier (top-layer brain: grok-4.5 + kimi-k3 -> capable reasoners) -----
 
 def test_orch_default_is_free_first_not_zen():
-    # Orchestrator leads with FREE, zen GO is LAST. The free DeepSeek 0731 heads the tier on
-    # published agentic scores; if it is down the other free reasoners (mis-medium/nim-glm)
-    # follow, and go-* is reached only when every free and flat option is gone.
+    # DeepSeek 0731 takes BOTH lead slots: free first, then its flat twin. This is the one place
+    # a flat model is ranked ahead of free ones on purpose -- orchestrator is quality-ordered,
+    # GO is flat so the marginal call is free, and keeping the best model on the tier's hardest
+    # work beats dropping to a weaker free reasoner. "GO LAST" still governs everything below.
     assert route("[ORCH] synthesize these drafts") == "free-deepseek"
     assert route("[AUDIT] check this answer") == "free-deepseek"
     down = {"free-deepseek": {"ok": False}}
-    nxt = route("[AUDIT] check this answer", health=down)
-    assert pr._cost_class(nxt) == 0 and nxt != "free-deepseek"
+    assert route("[AUDIT] check this answer", health=down) == "go-deepseek-flash"
+    # ...and once BOTH 0731 lanes are gone, free reasoners resume the lead over the rest of GO.
+    down2 = {"free-deepseek": {"ok": False}, "go-deepseek-flash": {"ok": False}}
+    assert pr._cost_class(route("[AUDIT] check this answer", health=down2)) == 0
 
 def test_orch_boost_stays_free_not_brain_not_zen():
     # Even [BOOST][ORCH] on drift stays on FREE (brains restricted; zen GO is last-resort).
@@ -625,14 +628,13 @@ def test_orchestrator_falls_to_zen_only_when_free_and_flat_down():
     assert got.startswith("go-") and pr._cost_class(got) == 1, f"expected a GO alias, got {got}"
 
 def test_orchestrator_free_nim_leads_when_flat_down():
-    # brains + anthropic down, but free NIM up -> nim-glm leads (free before zen GO).
+    # Below the two 0731 lead slots, free still beats GO. With both DeepSeek lanes benched the
+    # free reasoners must answer -- the rest of GO stays last, which is what "GO LAST" protects.
     av = {"nim": True, "zen": True, "copilot": True, "anthropic": False}
-    h = {"go-kimi-k3": {"ok": False}, "go-grok": {"ok": False}}
+    h = {"go-kimi-k3": {"ok": False}, "go-grok": {"ok": False},
+         "free-deepseek": {"ok": False}, "go-deepseek-flash": {"ok": False}}
     got = route("[ORCH] x", avail=av, health=h)
     assert pr._cost_class(got) == 0, f"flat lane answered while free was up: {got}"
-    # ...and with the new DeepSeek benched, the free NIM reasoner is next.
-    h2 = dict(h); h2["free-deepseek"] = {"ok": False}
-    assert pr._cost_class(route("[ORCH] x", avail=av, health=h2)) == 0
 
 def test_orch_brains_get_high_thinking_via_go_shape():
     r = _hook({"model": "go-kimi-k3", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
@@ -1146,10 +1148,18 @@ def test_explicit_intent_tiers_are_cost_ascending():
     request and a mis-ordered list is harmless. A class-4 alias sitting above a class-1 one here
     spends the dearer subscription first, on a different model, for nothing.
 
-    LAST_RESORT_BRAINS are the deliberate exception: class 1, pinned at the tail because a GO 429
-    when the plan is saturated overflows to per-token Zen billing."""
+    Two deliberate exceptions, both excluded from the check below rather than silently tolerated:
+
+    * LAST_RESORT_BRAINS: class 1, pinned at the tail because a GO 429 when the plan is saturated
+      overflows to per-token Zen billing.
+    * go-deepseek-flash: class 1, lifted to slot 2 ahead of the free models. These are the two
+      tiers that rank by QUALITY, GO is flat so its marginal call costs nothing, and the 0731
+      flash outscores the previous generation's pro. Keeping the best model on the hardest work
+      is worth one flat call; the rule still holds for everything below it."""
     for tier in ("frontier", "orchestrator"):
-        members = [m for m in pr.TIER_MAP[tier] if m not in pr.LAST_RESORT_BRAINS]
+        assert pr.TIER_MAP[tier][:2] == ["free-deepseek", "go-deepseek-flash"], (
+            f"{tier} must lead with the 0731 pair, free first")
+        members = [m for m in pr.TIER_MAP[tier][2:] if m not in pr.LAST_RESORT_BRAINS]
         classes = [pr._cost_class(m) for m in members]
         assert classes == sorted(classes), (
             f"{tier} is not cost-ascending: "

@@ -46,22 +46,22 @@ def test_reason_keeps_the_stability_tiebreak():
     # momentarily faster — a flappy model must not lead a multi-minute task.
     h = {"nim-glm": {"ok": True, "latency_ms": 500},
          "free-ling": {"ok": True, "latency_ms": 3000}}
-    assert route("[REASON] prove it", health=h) == "free-ling"
+    assert route("[REASON] prove it", health=h) == "free-deepseek"
 
 
 def test_default_general_is_stable_free():
     # >1200 chars so it lands in general tier, not cheap (<=300 tok = 1200 chars)
     long = "Explain the history and philosophy of stoicism " * 30
-    assert route(long) == "free-nemotron"
+    assert route(long) == "free-deepseek"
 
 
 def test_code_marker_routes_to_stable_free():
-    assert route("debug this:\n```python\nprint(1)\n```") == "free-north"
+    assert route("debug this:\n```python\nprint(1)\n```") == "free-deepseek"
 
 
 def test_think_tag_routes_reason_tier():
     # Stable free reasoners (free-*) lead the reason tier over NIM.
-    assert route("[THINK] prove the halting problem is undecidable") == "free-ling"
+    assert route("[THINK] prove the halting problem is undecidable") == "free-deepseek"
 
 
 def test_frontier_tag_prefers_free_nim_when_healthy():
@@ -156,7 +156,42 @@ def test_free_hosts_rank_zenfree_then_mistral_then_nim():
     out = pr.order_tier(["nim-glm", "mis-large", "free-north"], health)
     assert out == ["free-north", "mis-large", "nim-glm"]
     assert (pr._stability_rank("free-north"), pr._stability_rank("mis-large"),
-            pr._stability_rank("nim-glm")) == (0, 1, 2)
+            pr._stability_rank("nim-glm")) == (1, 2, 3)
+    # ...and the new DeepSeek outranks even the rest of zen-free.
+    assert pr._stability_rank("free-deepseek") == 0
+
+
+def test_new_deepseek_is_the_default_in_every_auto_tier():
+    # The new DeepSeek V4 Flash (0731, DeepSeek-hosted) is free AND near-frontier, so it leads
+    # every automatically-routed tier whenever it is healthy. FRONTIER/ORCHESTRATOR are excluded
+    # on purpose: they keep config (quality) order rather than the cost/stability sort.
+    av = {p: True for p in pr.PRIORITY_CHAIN}
+    for tier in ("cheap", "general", "code", "reason", "agent"):
+        got = pr.route("x", {"tier": tier}, av, {})
+        assert got == "free-deepseek", f"{tier} led with {got}, not the new DeepSeek"
+
+
+def test_free_ladder_is_new_deepseek_then_zenfree_then_mistral_then_nim():
+    # The full ordering asked for: new DeepSeek -> rest of Zen free -> Mistral -> NIM, and only
+    # then anything that costs (flat before paid, enforced by _cost_class).
+    assert pr._stability_rank("free-deepseek") == 0
+    assert pr._stability_rank("free-north") == 1
+    assert pr._stability_rank("mis-large") == 2
+    assert pr._stability_rank("nim-glm") == 3
+    tier = ["co-sonnet", "zen-glm", "go-glm", "nim-glm", "mis-large", "free-north", "free-deepseek"]
+    out = pr.order_tier(tier, {})
+    assert out[:4] == ["free-deepseek", "free-north", "mis-large", "nim-glm"]
+    # everything free first, then ascending cost — flat (go) before per-token (zen) before copilot
+    assert [pr._cost_class(m) for m in out] == sorted(pr._cost_class(m) for m in out)
+
+
+def test_old_deepseek_builds_are_kept_but_never_lead():
+    # The old relays stay wired (they are still capacity) but must not outrank the new build.
+    # NIM's same-named deepseek-v4-flash answered "1, 2" to a question the new one gets right.
+    assert "nim-deepseek-flash" in pr.CHEAP_TIER          # kept, not deleted
+    assert pr._stability_rank("nim-deepseek-flash") == 3  # ...but last among free
+    assert "go-deepseek-flash" in pr.NEW_DEEPSEEK
+    assert pr._cost_class("go-deepseek-flash") == 1       # flat: always behind the free twin
 
 
 def test_models_that_reason_natively_are_all_declared():
@@ -598,9 +633,9 @@ def test_orch_l2_reasoners_get_high_others_off():
 def test_role_tags_map_to_worker_tiers():
     # Stability-first: workers land on the stable-free leader of their tier (zen-free), not NIM.
     assert route("[SCOUT] list the files in this repo") == "free-deepseek"  # cheap
-    assert route("[ANALYST] interpret these benchmark numbers") == "free-ling"  # reason
-    assert route("[VERIFIER] check this claim against the source") == "free-ling"
-    assert route("[AUDITOR] does the code match the spec") == "free-ling"
+    assert route("[ANALYST] interpret these benchmark numbers") == "free-deepseek"  # reason
+    assert route("[VERIFIER] check this claim against the source") == "free-deepseek"
+    assert route("[AUDITOR] does the code match the spec") == "free-deepseek"
 
 def test_role_tag_parsed_and_stripped():
     cleaned, d = pr.parse_request("[SCOUT] gather links")
@@ -611,7 +646,7 @@ def test_role_tag_parsed_and_stripped():
 def test_orch_boss_distinct_from_worker_roles():
     # [ORCH] = orchestrator tier (free-first: nim-glm), role tags are the reason/cheap workers.
     assert route("[ORCH] final verdict") == "nim-glm"           # orchestrator tier (free leads, zen last)
-    assert route("[VERIFIER] check") == "free-ling"          # reason tier (stable-free leads)
+    assert route("[VERIFIER] check") == "free-deepseek"       # reason tier (new DeepSeek leads)
 
 
 # --- paid per-token overflow ($20 balance) ---------------------------------------------------
@@ -1016,7 +1051,11 @@ def test_session_sticks_then_releases_on_tier_change_or_death():
     k = pr.session_key([{"role": "user", "content": "a session"}])
     first = pr.route("one", {}, av, {}, 200, None, k)
     assert pr.route("two", {}, av, {}, 200, None, k) == first      # stays put
-    assert pr.route("x", {"tier": "reason"}, av, {}, 200, None, k) != first  # different work
+    # A tier change must RE-DECIDE rather than inherit. Asserting "different name" would be wrong:
+    # the new DeepSeek legitimately leads several tiers, so the same model can win twice on merit.
+    # frontier keeps config (quality) order instead of the stability sort, so its leader really is
+    # a different model — which is what proves the sticky value was dropped, not reused.
+    assert pr.route("x", {"tier": "frontier"}, av, {}, 200, None, k) == pr.FRONTIER_TIER[0]
     dead = {first: {"ok": False}}
     assert pr.route("one", {}, av, dead, 200, None, k) != first    # never pin a dead model
 

@@ -88,14 +88,14 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # is what decides inside a cost class. Codex quota per OpenAI's published table — credits/1M
 # in-out and messages per 5h window: luna 5/30 (250-2000 msgs) << mini 18.75/113 (60-350)
 # << 5.5 (15-80) << sol 125/750 (10-100). So luna leads: cheapest on quota AND newer-gen.
-CHEAP_TIER    = ["nim-llama", "nim-deepseek-flash", "free-deepseek", "free-pickle", "mis-codestral", "go-deepseek-flash", "go-mimo-lite", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
-CODE_TIER     = ["nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
+CHEAP_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-llama", "nim-deepseek-flash", "free-pickle", "mis-codestral", "go-mimo-lite", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
+GENERAL_TIER  = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+CODE_TIER     = ["free-deepseek", "go-deepseek-flash", "nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
-REASON_TIER   = ["nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
-AGENT_TIER    = ["nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]
+REASON_TIER   = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
+AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
@@ -155,7 +155,10 @@ ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku e
 # DEFAULT with no param, and reasoning_effort only REDUCES that trace. Free, so never a reason to
 # hold back — always HIGH, and we inject NO param so their native max-depth reasoning is preserved
 # (a param here would shrink it for zero benefit). They exist only for the annotation + tiering.
-FREE_REASONERS = frozenset({"free-ling", "free-mimo", "free-north", "free-nemotron"})
+FREE_REASONERS = frozenset({"free-ling", "free-mimo", "free-north", "free-nemotron",
+                            # DeepSeek V4 Flash 0731 reasons with no param: 111-277
+                            # reasoning_tokens measured live. Its old relay twins emit zero.
+                            "free-deepseek"})
 # Mistral reasoners (magistral / mistral-medium hybrid): reason natively on api.mistral.ai with NO
 # param — verified live, they 200 with reasoning inline (no separate reasoning_content field to
 # toggle). Treated like FREE_REASONERS: inject nothing, annotate high.
@@ -170,7 +173,12 @@ MIS_REASONERS = frozenset({"mis-medium", "mis-magistral"})
 # their thinking time against a non-reasoner's latency ceiling and benched them. nim-deepseek was
 # checked the same way and returns no reasoning_content, so it stays out.
 NIM_NATIVE = frozenset({"nim-step", "nim-nemotron", "nim-nemotron-super"})
-NATIVE_REASONERS = FREE_REASONERS | MIS_REASONERS | NIM_NATIVE
+# GO's DeepSeek V4 Flash (the 0731 build) reasons natively too. It ACCEPTS reasoning_effort without
+# erroring, which is why it does not belong in GO_THINKING: sending high measured FEWER reasoning
+# tokens than sending nothing (12 vs 15), exactly like the other native reasoners — the knob only
+# shrinks the default trace. Injecting nothing keeps its full depth, and it is free/flat either way.
+GO_NATIVE = frozenset({"go-deepseek-flash"})
+NATIVE_REASONERS = FREE_REASONERS | MIS_REASONERS | NIM_NATIVE | GO_NATIVE
 # z.ai GLM reasoners on the Anthropic-compat endpoint: verified live they accept the Anthropic
 # thinking block {"type":"enabled","budget_tokens":N} and return a `thinking` content block. Same
 # injection + budget table as ANT_THINKING (think-class "ant"), even though cost-wise they're flat.
@@ -607,25 +615,48 @@ def _cost_class(model: str) -> int:
     return 6
 
 
+# DeepSeek V4 Flash, the 2026-07-31 checkpoint, served from DeepSeek's own API (opencode's
+# "models hosted in China" toggle). Verified live on 2026-08-02 against every lane carrying the
+# name — two independent signals separate the new build from the old relay:
+#   * DeepSeek-native usage accounting (prompt_cache_hit_tokens / prompt_cache_miss_tokens). Not in
+#     the OpenAI schema, so it only survives when the request reaches DeepSeek directly.
+#   * It reasons. 111-277 reasoning_tokens on a prompt where the relays emit zero.
+# Same measurement on "count the r's in strawberry and raspberry": these two answered 3 3, NIM's
+# same-named deepseek-v4-flash answered "1, 2". Identical model name, different model.
+#   free-deepseek     -> deepseek-v4-flash-free  (Zen free tier, $0)
+#   go-deepseek-flash -> deepseek-v4-flash       (GO flat)
+# NOT the new build, deliberately left where they are rather than removed: the Zen PAID
+# deepseek-v4-flash and NIM's deepseek-v4-flash are both the older relay.
+NEW_DEEPSEEK = frozenset({"free-deepseek", "go-deepseek-flash"})
+
+
 def _stability_rank(model: str) -> int:
-    """Within the free class (0), order free hosts by how dependable they are: zen-free -> Mistral
-    -> NIM. This is a RELIABILITY order, not a speed one, and it deliberately outranks measured
-    latency in order_tier — a host that is 1s faster on a good minute is worth nothing against one
-    that 529s or stalls for 11s, both of which NIM did repeatedly in one afternoon while zen-free
-    held ~2s. Mistral sits in the middle: steady when it works, but its key is a single point of
-    failure that has lapsed before (four 401s until it was replaced).
+    """Within the free class (0), order free hosts by how dependable they are: the new DeepSeek
+    Flash -> the rest of zen-free -> Mistral -> NIM. This is a RELIABILITY order, not a speed one,
+    and it deliberately outranks measured latency in order_tier — a host that is 1s faster on a
+    good minute is worth nothing against one that 529s or stalls for 11s, both of which NIM did
+    repeatedly in one afternoon while zen-free held ~2s. Mistral sits in the middle: steady when it
+    works, but its key is a single point of failure that has lapsed before (four 401s until it was
+    replaced).
+
+    The new DeepSeek leads outright because it is free AND near-frontier: it is the default answer
+    whenever it is healthy, and the health gate is what decides that. Its flat twin
+    (go-deepseek-flash) is not ranked here at all — it sits in cost class 1, which already places
+    it behind every free model, so it needs no help.
 
     Giving zen-free and Mistral the same rank was the bug this replaces: they tied, so latency
     broke the tie and whichever happened to be faster that minute led — exactly the flapping this
     is meant to prevent. Only breaks ties inside one cost class; cost_class still dominates, so
     this never lifts a free model above a cheaper one or vice-versa."""
     p = MODEL_PROVIDER.get(model, "")
+    if model in NEW_DEEPSEEK and _cost_class(model) == 0:
+        return 0        # new DeepSeek V4 Flash on the free tier — default whenever healthy
     if model.startswith("free-"):
-        return 0        # opencode Zen free tier — steadiest host, leads whenever it is healthy
+        return 1        # rest of the opencode Zen free tier — steady hosts
     if p == "mistral":
-        return 1        # Mistral free — steady, but key-dependent
+        return 2        # Mistral free — steady, but key-dependent
     if p == "nim":
-        return 2        # NIM free — load-variable, flaps; last among free
+        return 3        # NIM free — load-variable, flaps; last among free
     return 0            # non-free providers: no intra-class stability preference
 
 

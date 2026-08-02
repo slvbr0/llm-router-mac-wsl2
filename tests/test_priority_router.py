@@ -65,8 +65,9 @@ def test_think_tag_routes_reason_tier():
 
 
 def test_frontier_tag_prefers_free_nim_when_healthy():
-    # Cost-first frontier: free NIM (if healthy) before GO/Anthropic/Copilot.
-    assert route("[FRONTIER] design a novel consensus protocol") == "nim-glm"
+    # Cost-first frontier: the free DeepSeek 0731 leads on published agentic scores
+    # (Terminal-Bench 2.1 82.7 vs 72.1 for the previous *pro*), then free NIM, then flat/paid.
+    assert route("[FRONTIER] design a novel consensus protocol") == "free-deepseek"
 
 def test_frontier_falls_to_anthropic_then_copilot_when_free_down():
     # NIM + Zen down -> Anthropic Max, then Copilot. (avail without 'anthropic' key -> ant gated out.)
@@ -78,7 +79,9 @@ def test_frontier_gives_nim_thinking():
     # FRONTIER keeps explicit (quality) order — not stability-sorted — so nim-glm still leads and
     # its reasoning gets toggled via chat_template_kwargs.enable_thinking (verified live).
     # (REASON now leads with a stable-free native reasoner, so it's covered separately.)
-    r = _hook({"model": "auto", "messages": [{"role": "user", "content": "[FRONTIER] hard task"}]})
+    # Pin nim-glm explicitly: the point here is the injected parameter SHAPE, not who leads the
+    # tier. free-deepseek now leads frontier and is a native reasoner, which injects nothing.
+    r = _hook({"model": "nim-glm", "messages": [{"role": "user", "content": "[FRONTIER] hard task"}]})
     assert r["model"] == "nim-glm"
     assert r["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
     assert "thinking_budget_tokens" not in r["extra_body"]   # NIM has no budget knob
@@ -547,21 +550,29 @@ def test_free_reasoners_are_in_reason_tier():
 # --- orchestrator/auditor tier (top-layer brain: grok-4.5 + kimi-k3 -> capable reasoners) -----
 
 def test_orch_default_is_free_first_not_zen():
-    # Orchestrator now leads with FREE (mis-medium/nim-glm), zen GO is LAST. With only nim/zen up,
-    # the free NIM reasoner leads; go-glm is only reached if all free/flat are down.
-    assert route("[ORCH] synthesize these drafts") == "nim-glm"
-    assert route("[AUDIT] check this answer") == "nim-glm"
+    # Orchestrator leads with FREE, zen GO is LAST. The free DeepSeek 0731 heads the tier on
+    # published agentic scores; if it is down the other free reasoners (mis-medium/nim-glm)
+    # follow, and go-* is reached only when every free and flat option is gone.
+    assert route("[ORCH] synthesize these drafts") == "free-deepseek"
+    assert route("[AUDIT] check this answer") == "free-deepseek"
+    down = {"free-deepseek": {"ok": False}}
+    nxt = route("[AUDIT] check this answer", health=down)
+    assert pr._cost_class(nxt) == 0 and nxt != "free-deepseek"
 
 def test_orch_boost_stays_free_not_brain_not_zen():
     # Even [BOOST][ORCH] on drift stays on FREE (brains restricted; zen GO is last-resort).
     av = {"nim": True, "zen": True, "copilot": True, "anthropic": True}
-    assert route("[BOOST][ORCH] this verdict is wrong", avail=av) == "nim-glm"
-    assert route("[BOOST][AUDIT] redo this", avail=av) == "nim-glm"
+    for p in ("[BOOST][ORCH] this verdict is wrong", "[BOOST][AUDIT] redo this"):
+        got = route(p, avail=av)
+        assert pr._cost_class(got) == 0, f"orchestrator boost spent money: {got}"
+        assert got not in pr.LAST_RESORT_BRAINS, f"boost reached a brain: {got}"
 
 def test_orch_free_before_zen_full_avail():
-    # With everything up, the stable free reasoner (mis-medium) leads — zen never touched.
+    # With everything up, a FREE reasoner leads and zen GO is never touched. The leader is the
+    # new DeepSeek; what matters is that it costs nothing and is not a GO/paid alias.
     av = {"nim": True, "mistral": True, "zai": True, "zen": True, "anthropic": True, "copilot": True}
-    assert route("[BOOST][ORCH] wrong, redo", avail=av) == "mis-medium"
+    got = route("[BOOST][ORCH] wrong, redo", avail=av)
+    assert got == "free-deepseek" and pr._cost_class(got) == 0
 
 def test_brains_never_auto_selected_on_everyday_tiers():
     # The scarce brains (grok 120 req/5h, kimi-k3 110) are allowed ONLY at the frontier tail.
@@ -594,14 +605,22 @@ def test_brain_still_reachable_by_EXPLICIT_request():
 def test_orchestrator_falls_to_zen_only_when_free_and_flat_down():
     # zen GO is the LAST orchestrator resort: reached only when free (nim) + flat (z.ai/anthropic)
     # are all unavailable. Here nim is down and mistral/zai/anthropic absent -> go-glm.
+    # Every FREE option must be gone, which now includes the zen-free DeepSeek, before GO is
+    # allowed to answer. (Marking the provider down is not enough: go-* shares it.)
     av = {"nim": False, "zen": True, "copilot": True}
-    assert route("[ORCH] x", avail=av) == "go-glm"
+    h = {m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 0}
+    got = route("[ORCH] x", avail=av, health=h)
+    assert got.startswith("go-") and pr._cost_class(got) == 1, f"expected a GO alias, got {got}"
 
 def test_orchestrator_free_nim_leads_when_flat_down():
     # brains + anthropic down, but free NIM up -> nim-glm leads (free before zen GO).
     av = {"nim": True, "zen": True, "copilot": True, "anthropic": False}
     h = {"go-kimi-k3": {"ok": False}, "go-grok": {"ok": False}}
-    assert route("[ORCH] x", avail=av, health=h) == "nim-glm"
+    got = route("[ORCH] x", avail=av, health=h)
+    assert pr._cost_class(got) == 0, f"flat lane answered while free was up: {got}"
+    # ...and with the new DeepSeek benched, the free NIM reasoner is next.
+    h2 = dict(h); h2["free-deepseek"] = {"ok": False}
+    assert pr._cost_class(route("[ORCH] x", avail=av, health=h2)) == 0
 
 def test_orch_brains_get_high_thinking_via_go_shape():
     r = _hook({"model": "go-kimi-k3", "messages": [{"role": "user", "content": "[ORCH] hard"}]})
@@ -645,7 +664,7 @@ def test_role_tag_parsed_and_stripped():
 
 def test_orch_boss_distinct_from_worker_roles():
     # [ORCH] = orchestrator tier (free-first: nim-glm), role tags are the reason/cheap workers.
-    assert route("[ORCH] final verdict") == "nim-glm"           # orchestrator tier (free leads, zen last)
+    assert route("[ORCH] final verdict") == "free-deepseek"     # orchestrator tier (free leads, zen last)
     assert route("[VERIFIER] check") == "free-deepseek"       # reason tier (new DeepSeek leads)
 
 

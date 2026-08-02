@@ -100,7 +100,7 @@ AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax",
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
 # zen-gpt dropped (dead: 401). Config order = intent (frontier is not latency-sorted).
-FRONTIER_TIER = ["nim-glm", "nim-minimax", "mis-medium", "zai-52", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "co-opus", "co-sonnet", "co-gemini",
+FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "zai-52", "go-deepseek-flash", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "cod-sol", "co-opus", "co-sonnet", "co-gemini",
                  "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free)/zai-52(flat) reasoners between free NIM and GO
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
@@ -134,9 +134,11 @@ PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "ant-opus", "ant-fable
 # down — because a GO 429 when saturated overflows to per-token Zen. zen paid is never in the tier
 # (reached only via a GO model's own fallback if literally everything else is unavailable). Brains
 # excluded (RESTRICTED_AUTO).
-ORCHESTRATOR_TIER = ["mis-medium", "nim-glm",                         # free reasoners
+ORCHESTRATOR_TIER = ["free-deepseek",                                 # DeepSeek V4 Flash 0731, free
+                     "mis-medium", "nim-glm",                         # free reasoners
                      "zai-52",                                          # z.ai flat
                      "ant-sonnet", "ant-opus",                          # Anthropic Max flat
+                     "go-deepseek-flash",                               # 0731's flat twin, heads GO
                      "go-glm", "go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo"]  # zen GO LAST
 
 # --- Thinking-capable model sets and budget table ---
@@ -627,6 +629,17 @@ def _cost_class(model: str) -> int:
 #   go-deepseek-flash -> deepseek-v4-flash       (GO flat)
 # NOT the new build, deliberately left where they are rather than removed: the Zen PAID
 # deepseek-v4-flash and NIM's deepseek-v4-flash are both the older relay.
+#
+# It leads EVERY tier, frontier and orchestrator included, on published agentic scores — this is a
+# flash model that beats the previous generation's *pro*, so treating it as cheap-tier-only was
+# leaving the best free option on the bench:
+#   benchmark            V4 Flash 0731   V4-Pro-Preview   Flash Preview
+#   Terminal-Bench 2.1        82.7            72.1            61.8
+#   DeepSWE                   54.4             --              7.3
+#   DSBench-FullStack         68.7             --             37.0
+#   Toolathlon (verified)     70.3 | Cybergym 76.7 | NL2Repo 54.2 | DSBench-Hard 59.6
+# Frontier/orchestrator are NOT cost-sorted (they keep config order as an explicit quality
+# statement), so its position there is a deliberate ranking, not a cost side-effect.
 NEW_DEEPSEEK = frozenset({"free-deepseek", "go-deepseek-flash"})
 
 

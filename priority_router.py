@@ -75,7 +75,14 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
     # Claude Max subscription via OAuth (flat-rate, rate-limited by Anthropic)
     "anthropic": ["ant-fable", "ant-opus", "ant-sonnet", "ant-haiku"],
     # Codex/ChatGPT subscription (flat) via providers/codex_oauth_proxy.py on :4042.
-    "codex": ["cod-sol", "cod-terra", "cod-luna", "cod-mini"],
+    # Two ChatGPT subscriptions, one per machine. Each box's `codex` CLI owns the auth.json at
+    # its own DEFAULT path and refreshes it, so neither token goes stale and nothing races for a
+    # refresh token — the reason the second subscription lives on the other box instead of in a
+    # second creds file here. cod2-* reaches it through an SSH tunnel (scripts/start_codex_bridge.sh);
+    # it is listed AFTER cod-* so the local account is always drained first and the remote one is
+    # the overflow. Identical cost class: both are the same flat plan, only reachability differs.
+    "codex": ["cod-sol", "cod-terra", "cod-luna", "cod-mini",
+              "cod2-sol", "cod2-terra", "cod2-luna", "cod2-mini"],
 }
 
 # Tiers: NIM first (health-gated) -> Zen (free before paid) -> ant-* -> Copilot tail.
@@ -88,14 +95,14 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # is what decides inside a cost class. Codex quota per OpenAI's published table — credits/1M
 # in-out and messages per 5h window: luna 5/30 (250-2000 msgs) << mini 18.75/113 (60-350)
 # << 5.5 (15-80) << sol 125/750 (10-100). So luna leads: cheapest on quota AND newer-gen.
-CHEAP_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-llama", "nim-deepseek-flash", "free-pickle", "mis-codestral", "go-mimo-lite", "go-luna", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
-GENERAL_TIER  = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
-CODE_TIER     = ["free-deepseek", "go-deepseek-flash", "nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
+CHEAP_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-llama", "nim-deepseek-flash", "free-pickle", "mis-codestral", "go-mimo-lite", "go-luna", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "cod2-luna", "cod2-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
+GENERAL_TIER  = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "cod2-luna", "cod2-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
+CODE_TIER     = ["free-deepseek", "go-deepseek-flash", "nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "cod2-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —
 # Phase 1.6). Without them here, "NIM -> HIGH on reason" was unreachable: the tier held only
 # non-thinking NIM models, so the budget table never applied. zen-gpt dropped (dead: 401).
 REASON_TIER   = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "nim-step", "free-ling", "free-mimo", "free-north", "mis-medium", "mis-magistral", "nim-inkling", "nim-nemotron", "go-hy3", "go-qwen36", "go-kimi26", "go-glm", "go-glm51", "go-qwen-max", "zai-52", "zai-51", "free-nemotron", "ant-sonnet", "co-opus"]  # free-*/mis-*/nim-step = free native reasoners; zai-5x = flat GLM reasoners
-AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]
+AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax", "nim-step", "mis-large", "mis-medium", "go-mimo-lite", "go-luna", "go-minimax27", "go-minimax", "go-glm", "zai-turbo", "ant-sonnet", "cod-terra", "cod2-terra", "co-sonnet"]
 # FRONTIER = cost-first order, every member at HIGH thinking: free NIM (if healthy) -> GO
 # flat-rate -> Anthropic Max -> Copilot. Health-gating handles "if available". NIM thinking
 # models lead so a frontier task can run on free GLM 5.2 + 32k thinking before touching paid.
@@ -105,7 +112,7 @@ AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax",
 # model, for no gain. Kept cost-ascending by hand, with quality order preserved inside each class,
 # and asserted by test_explicit_intent_tiers_are_cost_ascending so an edit cannot silently invert
 # it. The two brains are the deliberate exception: class 1, pinned last (see LAST_RESORT_BRAINS).
-FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "cod-sol", "go-deepseek-flash", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
+FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "cod-sol", "cod2-sol", "go-deepseek-flash", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
                  "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free) then GO flat, Codex, Anthropic Max, z.ai, Copilot last
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
@@ -133,7 +140,7 @@ RESTRICTED_AUTO = LAST_RESORT_BRAINS   # back-compat alias
 #   cod-sol      10-100 msgs/5h, 125/750 credits per 1M     (25x go-luna)
 #   ant-opus / ant-fable          frontier-priced Claude
 # Enforced in route(); a test asserts none of them appears in an everyday tier list.
-PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "ant-opus", "ant-fable"})
+PREMIUM_ONLY = LAST_RESORT_BRAINS | frozenset({"cod-sol", "cod2-sol", "ant-opus", "ant-fable"})
 # Cost-safe order (explicit, NOT latency-sorted): FREE reasoners -> z.ai flat -> Anthropic Max flat
 # -> zen GO LAST. Even [BOOST][ORCH] stays on free/flat and only reaches zen GO if all of those are
 # down — because a GO 429 when saturated overflows to per-token Zen. zen paid is never in the tier
@@ -166,7 +173,7 @@ GO_THINKING  = frozenset({"go-glm", "go-glm51", "go-qwen36", "go-kimi26",
                           "zen-glm", "zen-qwen-plus", "zen-qwen-max", "zen-grok",
                           "zen-kimi3", "zen-luna", "zen-terra", "zen-sol"})
 # Codex reasoners: the proxy maps OpenAI `reasoning_effort` -> Responses `reasoning.effort`.
-COD_THINKING = frozenset({"cod-sol"})
+COD_THINKING = frozenset({"cod-sol", "cod2-sol"})
 ANT_THINKING = frozenset({"ant-opus", "ant-fable", "ant-sonnet"})  # ant-haiku excluded
 # opencode Zen FREE-tier native reasoners. Verified live: they emit a reasoning_content trace by
 # DEFAULT with no param, and reasoning_effort only REDUCES that trace. Free, so never a reason to

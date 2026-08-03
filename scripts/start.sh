@@ -38,6 +38,11 @@ sh scripts/zai_auth.sh
 echo "②c Codex/ChatGPT OAuth shim…"
 sh scripts/start_codex_proxy.sh
 
+echo "②d Codex bridge to the peer box (second subscription)…"
+# Best-effort: a missing peer must not block startup. cod2-* simply stays unreachable and
+# the router falls through to the next lane, exactly as it does for any down provider.
+sh scripts/start_codex_bridge.sh || true
+
 echo "③ NIM latency audit…"
 sh scripts/nim_health.sh
 # Cache profile: which models actually reuse the provider prompt cache. Pure SQL over the

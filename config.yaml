@@ -72,6 +72,22 @@ model_list:
   - model_name: cod-sol
     litellm_params: {model: openai/gpt-5.6-sol, api_base: http://host.docker.internal:4042/v1, api_key: os.environ/LITELLM_MASTER_KEY}    # ~2.8s, strongest; takes reasoning_effort
 
+  # ---- Codex lane 2: the OTHER ChatGPT subscription, reached over the box-to-box bridge ----
+  # Same shim, different account. Each machine's `codex` CLI owns the auth.json at its own default
+  # path and refreshes it, so neither lane can go stale and nothing races for a refresh token —
+  # which is exactly why the second subscription lives on the other box rather than in a second
+  # creds file here. :4142 is an SSH tunnel to the RTX box's shim (scripts/start_codex_bridge.sh).
+  # Reachability, not preference, is what separates cod2-* from cod-*: same cost class, appended
+  # after so the LOCAL account is always drained first and the remote one is the overflow.
+  - model_name: cod2-mini
+    litellm_params: {model: openai/gpt-5.4-mini, api_base: http://host.docker.internal:4142/v1, api_key: os.environ/LITELLM_MASTER_KEY}
+  - model_name: cod2-luna
+    litellm_params: {model: openai/gpt-5.6-luna, api_base: http://host.docker.internal:4142/v1, api_key: os.environ/LITELLM_MASTER_KEY}
+  - model_name: cod2-terra
+    litellm_params: {model: openai/gpt-5.6-terra, api_base: http://host.docker.internal:4142/v1, api_key: os.environ/LITELLM_MASTER_KEY}
+  - model_name: cod2-sol
+    litellm_params: {model: openai/gpt-5.6-sol, api_base: http://host.docker.internal:4142/v1, api_key: os.environ/LITELLM_MASTER_KEY}
+
   # ===== opencode Zen (per-token; conserve). IDs verified at build (Task 8). =====
   - model_name: zen-gpt
     litellm_params: {model: openai/gpt-5.5, api_base: https://opencode.ai/zen/v1, api_key: os.environ/ZEN_API_KEY}

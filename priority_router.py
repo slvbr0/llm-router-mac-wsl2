@@ -105,7 +105,7 @@ AGENT_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-minimax",
 # model, for no gain. Kept cost-ascending by hand, with quality order preserved inside each class,
 # and asserted by test_explicit_intent_tiers_are_cost_ascending so an edit cannot silently invert
 # it. The two brains are the deliberate exception: class 1, pinned last (see LAST_RESORT_BRAINS).
-FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "go-deepseek-flash", "go-glm", "go-qwen-max", "cod-sol", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
+FRONTIER_TIER = ["free-deepseek", "nim-glm", "nim-minimax", "mis-medium", "cod-sol", "go-deepseek-flash", "go-glm", "go-qwen-max", "ant-opus", "ant-fable", "ant-sonnet", "zai-52", "co-opus", "co-sonnet", "co-gemini",
                  "go-grok", "go-kimi-k3"]   # LAST_RESORT_BRAINS: frontier tail only, after everything else  # mis-medium(free) then GO flat, Codex, Anthropic Max, z.ai, Copilot last
 # ORCHESTRATOR / AUDITOR = checks scout/agent output and gives a verdict — LOW token, run often.
 # QUALITY-first order (NOT latency-sorted): capable, high-quota reliables (go-glm, ant-sonnet/opus
@@ -607,21 +607,30 @@ GO_ALIASES = {"go-glm", "go-deepseek", "go-kimi", "go-minimax",
 def _cost_class(model: str) -> int:
     # Marginal-cost order. Everything with a sunk/flat cost ranks before real per-token spend:
     #   0 free           NIM + Mistral free + Zen free tier
-    #   1 GO flat        opencode GO subscription — the most generous allowances, spend these first
-    #   2 Codex flat     ChatGPT/Codex subscription
+    #   1 Codex flat     ChatGPT/Codex subscription — currently free (Revolut, 6 months)
+    #   2 GO flat        opencode GO subscription
     #   3 Anthropic flat Claude Max subscription
     #   4 z.ai flat      GLM Coding Plan
     #   5 zen paid       real per-token money — the backstop
     #   6 copilot        per-request credit — last
+    #
+    # Codex ahead of GO is deliberate and is a SUBSCRIPTION fact, not a quality one. The ChatGPT
+    # plan is currently free (Revolut, 6 months), so its marginal request costs nothing at all,
+    # while GO is a paid flat plan. Draining the genuinely-free lane first also keeps GO in
+    # reserve for what it alone offers: it carries ~24 models against Codex's four, so the models
+    # with no Codex equivalent are exactly what its quota should be spent on. Where both serve the
+    # SAME model — gpt-5.6-luna is cod-luna, go-luna and zen-luna — this ordering is what makes the
+    # free lane answer first. Revisit when the promo ends.
+    #
     # None of the flat lanes is latency-probed (probing burns the quota they are held in reserve
     # for), so ORDER INSIDE a class is the tier's config order — which encodes quota generosity /
     # price, most generous first. See the tier definitions.
     p = MODEL_PROVIDER.get(model, "")
     if p == "nim" or p == "mistral" or model.startswith("free-"):
         return 0
-    if model in GO_ALIASES:
-        return 1
     if p == "codex":
+        return 1
+    if model in GO_ALIASES:
         return 2
     if p == "anthropic":
         return 3

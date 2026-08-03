@@ -188,16 +188,24 @@ def test_free_ladder_is_new_deepseek_then_zenfree_then_mistral_then_nim():
     assert [pr._cost_class(m) for m in out] == sorted(pr._cost_class(m) for m in out)
 
 
-def test_go_twin_heads_the_flat_block_in_every_tier():
-    # When free capacity is exhausted, the first thing that costs anything must be the 0731 flat
-    # twin — same model as the free leader, and the cheapest flat lane (GO class 1). Frontier and
-    # orchestrator are config-ordered rather than cost-sorted, so they only satisfy this if the
-    # alias is physically placed ahead of z.ai (class 4); they did not, which this pins.
+def test_go_twin_heads_the_GO_block_in_every_tier():
+    # When free capacity is exhausted the first paid-for lane must be the cheapest one. Codex is
+    # class 1 while the promo lasts, so a tier carrying a cod-* alias spends that; a tier without
+    # one falls to GO, and there the 0731 twin must lead — same model as the free leader, so the
+    # answer keeps its quality instead of dropping to another family.
     av = {p: True for p in pr.PRIORITY_CHAIN}
     allfree = {m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 0}
     for tier in ("cheap", "general", "code", "reason", "agent", "frontier", "orchestrator"):
         got = pr.route("x", {"tier": tier}, av, allfree)
-        assert got == "go-deepseek-flash", f"{tier} spent {got} (class {pr._cost_class(got)}) first"
+        assert pr._cost_class(got) == min(
+            pr._cost_class(m) for m in pr.TIER_MAP[tier]
+            if pr._cost_class(m) > 0 and m not in pr.LAST_RESORT_BRAINS), \
+            f"{tier} skipped a cheaper lane and spent {got} (class {pr._cost_class(got)})"
+    # ...and with Codex gone, the GO block is led by the 0731 twin wherever it is a member.
+    no_codex = dict(allfree)
+    no_codex.update({m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 1})
+    for tier in ("cheap", "general", "code", "reason", "agent"):
+        assert pr.route("x", {"tier": tier}, av, no_codex) == "go-deepseek-flash"
 
 
 def test_old_deepseek_builds_are_kept_but_never_lead():
@@ -206,7 +214,7 @@ def test_old_deepseek_builds_are_kept_but_never_lead():
     assert "nim-deepseek-flash" in pr.CHEAP_TIER          # kept, not deleted
     assert pr._stability_rank("nim-deepseek-flash") == 3  # ...but last among free
     assert "go-deepseek-flash" in pr.NEW_DEEPSEEK
-    assert pr._cost_class("go-deepseek-flash") == 1       # flat: always behind the free twin
+    assert pr._cost_class("go-deepseek-flash") == 2       # GO flat: always behind the free twin
 
 
 def test_models_that_reason_natively_are_all_declared():
@@ -622,7 +630,7 @@ def test_orchestrator_falls_to_zen_only_when_free_and_flat_down():
     av = {"nim": False, "zen": True, "copilot": True}
     h = {m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 0}
     got = route("[ORCH] x", avail=av, health=h)
-    assert got.startswith("go-") and pr._cost_class(got) == 1, f"expected a GO alias, got {got}"
+    assert got.startswith("go-") and pr._cost_class(got) == 2, f"expected a GO alias, got {got}"
 
 def test_orchestrator_free_nim_leads_when_flat_down():
     # brains + anthropic down, but free NIM up -> nim-glm leads (free before zen GO).
@@ -642,7 +650,7 @@ def test_orch_brains_get_high_thinking_via_go_shape():
 
 def test_orch_brains_are_flatrate_cost_class():
     # GO flat-rate leads the flat band (class 1), not per-token/anthropic
-    assert pr._cost_class("go-kimi-k3") == 1 and pr._cost_class("go-grok") == 1
+    assert pr._cost_class("go-kimi-k3") == 2 and pr._cost_class("go-grok") == 2
 
 def test_orch_l2_capables_in_tier():
     for m in ("go-qwen-max", "go-qwen-plus", "go-deepseek", "go-minimax", "go-mimo"):
@@ -716,14 +724,14 @@ def test_provider_map_knows_mistral_and_zai():
     assert pr.MODEL_PROVIDER["zai-flash"] == "zai"
 
 
-def test_cost_class_cascade_is_free_go_codex_ant_zai_paid_copilot():
+def test_cost_class_cascade_is_free_codex_go_ant_zai_paid_copilot():
     # The whole ordering intent in one assertion: strictly increasing marginal cost. Every
     # flat/sunk subscription ranks before any real per-token spend.
     assert pr._cost_class("mis-large") == 0        # Mistral free
     assert pr._cost_class("nim-glm") == 0          # NIM free
     assert pr._cost_class("free-ling") == 0        # Zen free tier
-    assert pr._cost_class("go-glm") == 1           # opencode GO flat — most generous, spend first
-    assert pr._cost_class("cod-luna") == 2         # Codex/ChatGPT flat
+    assert pr._cost_class("cod-luna") == 1         # Codex/ChatGPT flat — free on the Revolut promo
+    assert pr._cost_class("go-glm") == 2           # opencode GO flat — paid, and the wider roster
     assert pr._cost_class("ant-sonnet") == 3       # Claude Max flat
     assert pr._cost_class("zai-52") == 4           # z.ai flat
     assert pr._cost_class("zen-glm") == 5          # zen per-token (real money)
@@ -797,7 +805,7 @@ def test_nim_step_is_free_native_reasoner_no_param():
 
 def test_go_flat_beats_zai_when_free_reasoners_health_gated():
     # Cost cascade at the routing level: with EVERY free model gated off, the reason tier serves
-    # GO go-glm (class 1) before z.ai (class 2). NIM/Mistral are also masked by availability.
+    # a GO model (class 2) before z.ai (class 4). NIM/Mistral are also masked by availability.
     # All of FREE_POOL must go down, not just the reason-tier ones: since free_fallback() the
     # tier borrows any other healthy free model first — which is the point of that feature.
     health = {m: {"ok": False} for m in pr.FREE_POOL}
@@ -805,23 +813,27 @@ def test_go_flat_beats_zai_when_free_reasoners_health_gated():
               avail={"mistral": False, "nim": False, "zai": True, "zen": True,
                      "anthropic": True, "copilot": True},
               health=health)
-    # Assert the INTENT (GO flat class 1 beats z.ai class 2), not a specific alias — which GO
-    # model wins depends on the quota ranking and changes as opencode adds models.
-    assert r in pr.GO_ALIASES, f"expected a GO model, got {r}"
-    assert pr._cost_class(r) == 1 < pr._cost_class("zai-52")
+    # Assert the INTENT (a flat lane beats z.ai class 4), not a specific alias — which model
+    # wins depends on the quota ranking and changes as opencode adds models. Codex now ranks
+    # ahead of GO, so either flat lane satisfies the cascade; z.ai must not win.
+    assert r in pr.GO_ALIASES or pr.MODEL_PROVIDER.get(r) == "codex", f"expected a flat lane, got {r}"
+    assert pr._cost_class(r) < pr._cost_class("zai-52")
+    assert pr._cost_class(r) < pr._cost_class("zai-52")
 
 
 # --- Codex / ChatGPT subscription (flat, class 3 alongside Anthropic) -------------------------
 
 def test_codex_flat_precedes_anthropic_flat():
-    # Both are sunk-cost subscriptions, but Codex is spent before Claude Max.
+    # Codex is the first thing spent after free: the ChatGPT plan is currently free (Revolut,
+    # 6 months), so its marginal request costs nothing while GO is a paid flat plan.
     for m in ("cod-sol", "cod-terra", "cod-luna", "cod-mini"):
-        assert pr._cost_class(m) == 2 < pr._cost_class("ant-sonnet")
+        assert pr._cost_class(m) == 1
+        assert pr._cost_class(m) < pr._cost_class("go-glm") < pr._cost_class("ant-sonnet")
 
 
-def test_codex_ranks_after_go_but_before_anthropic_zai_and_paid():
+def test_codex_ranks_ahead_of_go_and_every_other_flat_lane():
     tier = ["zen-glm", "zai-52", "ant-sonnet", "cod-luna", "go-glm", "nim-glm"]
-    assert pr.order_tier(tier, {}) == ["nim-glm", "go-glm", "cod-luna", "ant-sonnet", "zai-52", "zen-glm"]
+    assert pr.order_tier(tier, {}) == ["nim-glm", "cod-luna", "go-glm", "ant-sonnet", "zai-52", "zen-glm"]
 
 
 
@@ -905,17 +917,19 @@ def test_health_probes_only_free_models():
         )
 # --- opencode GO quota ranking (2026-07-30) ----------------------------------------------------
 
-def test_go_luna_beats_codex_luna():
-    # Same underlying model (gpt-5.6-luna). GO is a flat subscription at cost class 1; Codex is
-    # class 3. Routing must prefer the cheaper class rather than the Codex proxy.
-    assert pr.order_tier(["cod-luna", "go-luna"], {},
-                         native={"cod-luna", "go-luna"})[0] == "go-luna"
+def test_codex_luna_beats_go_luna():
+    # Same underlying model (gpt-5.6-luna) on three lanes. The ChatGPT plan is currently free
+    # (Revolut, 6 months) and GO is paid, so the Codex lane must answer first and GO stays in
+    # reserve for the ~20 models Codex has no equivalent for.
+    assert pr.order_tier(["go-luna", "cod-luna"], {},
+                         native={"cod-luna", "go-luna"})[0] == "cod-luna"
+    assert pr._cost_class("cod-luna") < pr._cost_class("go-luna") < pr._cost_class("zen-luna")
 
 
-def test_new_go_models_are_flat_class_one():
+def test_new_go_models_are_flat_class_two():
     for m in ("go-mimo-lite", "go-hy3", "go-luna"):
         assert m in pr.GO_ALIASES
-        assert pr._cost_class(m) == 1
+        assert pr._cost_class(m) == 2
 
 
 def test_generous_go_models_lead_their_band():
@@ -1162,9 +1176,9 @@ def test_explicit_intent_tiers_are_cost_ascending():
 
 def test_desperation_walk_is_cost_ordered_not_provider_ordered():
     """Layer 5 must not inherit PRIORITY_CHAIN's dict order. That order groups by provider, and
-    provider order is not cost order — it reaches z.ai (4) before GO (1) and Copilot (6) before
-    Anthropic (3) and Codex (2). With every tier empty the walk is the only thing choosing a lane,
-    so an inversion here spends the dearest lane while flat quota sits unused."""
+    provider order is not cost order — it reaches z.ai (4) before Codex (1) and GO (2), and
+    Copilot (6) before Anthropic (3). With every tier empty the walk is the only thing choosing a
+    lane, so an inversion here spends the dearest lane while flat quota sits unused."""
     saved = dict(pr.TIER_MAP)
     try:
         for k in pr.TIER_MAP:
@@ -1176,12 +1190,22 @@ def test_desperation_walk_is_cost_ordered_not_provider_ordered():
             f"walk chose {got} (class {pr._cost_class(got)}) while a free lane was available"
         )
         # Free lanes gone: it must take the cheapest remaining class, not the dict's next provider
-        # — GO (1) before z.ai (4), never Copilot (6) while Codex (2) is up.
+        # — Codex (1) before GO (2) and z.ai (4), never Copilot (6) while any flat lane is up.
         avail["nim"] = avail["mistral"] = False
         avail["zen"] = False          # drops both the free- and go- aliases in that provider
         got = pr.route("anything", {"tier": "general"}, avail, {})
+        assert pr._cost_class(got) == 1, (
+            f"walk chose {got} (class {pr._cost_class(got)}) instead of the cheapest flat lane"
+        )
+        # ...and with Codex down too, GO is next — still ahead of Anthropic, z.ai and Copilot.
+        # zen goes back ON so the go-* aliases return, and the free-* ones (same provider) are
+        # health-gated instead, which is the only way to separate them.
+        avail["codex"] = False
+        avail["zen"] = True
+        dead_free = {m: {"ok": False} for m in pr.MODEL_PROVIDER if pr._cost_class(m) == 0}
+        got = pr.route("anything", {"tier": "general"}, avail, dead_free)
         assert pr._cost_class(got) == 2, (
-            f"walk chose {got} (class {pr._cost_class(got)}) instead of the Codex flat lane"
+            f"walk chose {got} (class {pr._cost_class(got)}) instead of GO"
         )
     finally:
         pr.TIER_MAP.update(saved)

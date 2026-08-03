@@ -2,6 +2,8 @@
 
 One OpenAI-compatible endpoint, many free and cheap models behind it, cost discipline in the routing.
 
+**2026-08-03** — `gpt-5.6-luna` is now reachable on the GO flat lane as well as Codex, and the cost cascade puts **Codex ahead of GO** while that ChatGPT plan is free — so the same model is served by the lane that costs nothing. Multi-machine notes moved to the private companion repo (see Foundations).
+
 **2026-08-02** — **DeepSeek V4 Flash 0731 is the default in every tier**. It reached opencode's free and GO lanes via the "models hosted in China" toggle, and on published agentic scores this *flash* model beats the previous generation's *pro* (Terminal-Bench 2.1 82.7 vs 72.1; DeepSWE 54.4 vs 7.3 for the older flash). `free-deepseek` leads all seven tiers while healthy, and its flat twin `go-deepseek-flash` heads the flat block, so exhausting free capacity keeps the same model rather than dropping to another family. Also: the two fallback paths that only run on failure were re-sorted to follow the cost cascade.
 
 **2026-08-01** — free hosts now order by **reliability, not latency** (Zen free → Mistral → NIM) in every tier; native reasoners get their own health-probe latency ceiling so a model is no longer benched for thinking; three natively-reasoning models (`nim-nemotron`, `nim-nemotron-super`, `free-nemotron`) that were labelled `think:off` while visibly reasoning are now declared.
@@ -159,6 +161,13 @@ Pairs with prompt and token-compression tooling on the client side: [caveman](ht
 Linked, not bundled. Install them separately if you want them.
 
 ## Foundations
+
+> **Multi-machine setup** (two subscriptions on one lane, cross-host bridges, keeping tunnels alive
+> across reboots) is deliberately not documented here — it is specific to one person's hostnames,
+> VPN addresses and SSH aliases, none of which generalise. That lives in a private companion repo,
+> `slvbr0/my-stack` doc 24. The router itself needs none of it: everything below works on a single
+> machine, and the extra lanes are plain `config.yaml` entries pointed at a different `api_base`.
+
 
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — what the fusion and routing modes actually scored.
 - [docs/ADDING_PROVIDERS.md](docs/ADDING_PROVIDERS.md) — the extension surface, end to end.

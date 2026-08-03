@@ -38,7 +38,9 @@ fi
 # rather than hardcoding it; that is the single most common reason this bridge stops working.
 HOST="$CODEX_BRIDGE_HOST"
 if [ -z "$HOST" ]; then
-  HOST=$(ssh -o ConnectTimeout=10 -T "$PEER" 'wsl.exe hostname -I 2>/dev/null || hostname -I' 2>/dev/null | tr -d '\r' | awk '{print $1}')
+# NB: no 2>/dev/null inside the remote command. The peer's sshd hands it to Windows cmd,
+# which does not understand that redirection and fails with 'no se puede encontrar la ruta'.
+  HOST=$(ssh -o ConnectTimeout=10 -T "$PEER" 'wsl.exe hostname -I || hostname -I' 2>/dev/null | tr -d '\r' | awk '{print $1}')
 fi
 [ -z "$HOST" ] && { echo "   could not resolve the peer's shim address — bridge NOT started"; exit 1; }
 

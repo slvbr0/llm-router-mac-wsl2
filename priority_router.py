@@ -88,7 +88,7 @@ PRIORITY_CHAIN: Dict[str, List[str]] = {
 # is what decides inside a cost class. Codex quota per OpenAI's published table — credits/1M
 # in-out and messages per 5h window: luna 5/30 (250-2000 msgs) << mini 18.75/113 (60-350)
 # << 5.5 (15-80) << sol 125/750 (10-100). So luna leads: cheapest on quota AND newer-gen.
-CHEAP_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-llama", "nim-deepseek-flash", "free-pickle", "mis-codestral", "go-mimo-lite", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
+CHEAP_TIER    = ["free-deepseek", "go-deepseek-flash", "nim-llama", "nim-deepseek-flash", "free-pickle", "mis-codestral", "go-mimo-lite", "go-luna", "zai-flash", "ant-haiku", "cod-luna", "cod-mini", "co-haiku"]  # free-ling in REASON (native reasoner), not cheap
 GENERAL_TIER  = ["free-deepseek", "go-deepseek-flash", "nim-glm", "nim-inkling", "nim-step", "free-nemotron", "free-laguna", "mis-large", "go-mimo-lite", "go-hy3", "go-minimax27", "go-qwen36", "go-luna", "go-glm", "zai-turbo", "zai-flash", "ant-sonnet", "cod-luna", "cod-mini", "co-sonnet"]  # free-laguna: new free worker (health-gated; type unconfirmed, was rate-limited at wiring)
 CODE_TIER     = ["free-deepseek", "go-deepseek-flash", "nim-deepseek", "nim-gptoss", "nim-step", "free-north", "mis-large", "mis-codestral", "go-luna", "go-deepseek", "go-kimi", "go-kimi26", "zai-turbo", "ant-sonnet", "cod-terra", "co-sonnet"]  # free-north/nim-step = free code reasoners; mis-codestral = free code specialist
 # REASON leads with NIM thinking models (nim-glm/kimi/minimax get HIGH budget at this tier —

@@ -196,6 +196,67 @@ def _consume(resp, model: str) -> dict:
             "usage": usage or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
 
 
+def _relay(resp, model: str, write) -> None:
+    """Upstream Responses SSE -> chat/completions SSE, forwarded as it arrives.
+
+    Without this the shim answered a `stream: true` request with a single complete
+    chat.completion body. Every streaming client — opencode, Claude Code — then saw one empty
+    chunk and no text, which looked exactly like the Codex lane being down. Non-streaming callers
+    worked, which is why it survived so long: every test here had been non-streaming.
+
+    We must translate rather than pipe: the upstream speaks Responses events
+    (response.output_text.delta), the caller expects chat.completion.chunk objects, and the two
+    have different shapes. Terminating `data: [DONE]` matters — clients hang without it."""
+    cid, created = "chatcmpl-" + uuid.uuid4().hex[:24], int(time.time())
+
+    def frame(delta: dict, finish=None) -> bytes:
+        return b"data: " + json.dumps({
+            "id": cid, "object": "chat.completion.chunk", "created": created, "model": model,
+            "choices": [{"index": 0, "delta": delta, "finish_reason": finish}],
+        }).encode() + b"\n\n"
+
+    write(frame({"role": "assistant", "content": ""}))     # openers expect a role first
+    tool_calls, finish, saw_text = [], "stop", False
+    for raw in resp:
+        line = raw.decode("utf8", "ignore").strip()
+        if not line.startswith("data:"):
+            continue
+        chunk = line[5:].strip()
+        if not chunk or chunk == "[DONE]":
+            continue
+        try:
+            ev = json.loads(chunk)
+        except Exception:
+            continue
+        t = ev.get("type", "")
+        if t == "response.output_text.delta":
+            d = ev.get("delta", "")
+            if d:
+                saw_text = True
+                write(frame({"content": d}))
+        elif t == "response.reasoning_summary_text.delta":
+            d = ev.get("delta", "")
+            if d:
+                # Kept on its own field: folding reasoning into content would put the model's
+                # scratchpad in the answer, and the router's banner rides on content.
+                write(frame({"reasoning_content": d}))
+        elif t == "response.output_item.done":
+            item = ev.get("item") or {}
+            if item.get("type") == "function_call":
+                idx = len(tool_calls)
+                tool_calls.append(item)
+                finish = "tool_calls"
+                write(frame({"tool_calls": [{
+                    "index": idx, "id": item.get("call_id") or item.get("id", ""),
+                    "type": "function",
+                    "function": {"name": item.get("name", ""),
+                                 "arguments": item.get("arguments", "")}}]}))
+    if not saw_text and not tool_calls:
+        write(frame({"content": ""}))          # never end on zero chunks; clients treat that as an error
+    write(frame({}, finish))
+    write(b"data: [DONE]\n\n")
+
+
 class CodexProxyHandler(http.server.BaseHTTPRequestHandler):
     def _send(self, code: int, obj: dict):
         payload = json.dumps(obj).encode()
@@ -234,14 +295,32 @@ class CodexProxyHandler(http.server.BaseHTTPRequestHandler):
             headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json",
                      "chatgpt-account-id": acct, "OpenAI-Beta": "responses=experimental",
                      "Accept": "text/event-stream"})
+        # Honour the CALLER's stream flag. Upstream is always streamed (it 400s otherwise); what
+        # varies is whether we re-emit those events or collapse them into one body.
+        want_stream = bool(body.get("stream"))
         try:
             with urllib.request.urlopen(req, timeout=600, context=_SSL_CTX) as r:
+                if want_stream:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/event-stream")
+                    self.send_header("Cache-Control", "no-cache")
+                    self.send_header("Connection", "keep-alive")
+                    self.end_headers()
+
+                    def write(b):
+                        self.wfile.write(b)
+                        self.wfile.flush()      # unbuffered, or the client sees nothing until the end
+
+                    _relay(r, model, write)
+                    return
                 out = _consume(r, model)
         except urllib.error.HTTPError as e:
             detail = e.read()[:400].decode("utf8", "ignore")
             if e.code == 400 and "not supported" in detail:
                 detail += f" | this subscription serves: {', '.join(SUPPORTED)}"
             return self._send(e.code, {"error": {"message": detail, "type": "upstream_error"}})
+        except (BrokenPipeError, ConnectionResetError):
+            return                              # client hung up mid-stream; nothing to report
         except Exception as e:
             return self._send(502, {"error": {"message": f"upstream: {e}", "type": "upstream_error"}})
         self._send(200, out)

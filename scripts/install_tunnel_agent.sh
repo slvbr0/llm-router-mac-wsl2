@@ -48,16 +48,32 @@ drop() { # $1=port — clear whatever holds it, so the forward can be rebuilt
   [ -n "$P" ] && kill $P 2>/dev/null || true
 }
 
-# WSL2's address changes on every reboot of that box. Always re-read it.
-# NB: no 2>/dev/null inside the remote command. The peer's sshd hands it to Windows cmd,
-# which does not understand that redirection and fails with 'no se puede encontrar la ruta'.
+# Check the tunnels FIRST, over loopback, and do nothing else if they are healthy. The earlier
+# version resolved the peer's IP by ssh on every single tick, before testing anything — 291
+# connections in one afternoon, essentially all of them pointless because both forwards were fine.
+# Windows OpenSSH degrades under that churn and starts resetting sessions at userauth, which looks
+# exactly like a broken key and is impossible to diagnose from the client. Steady state must cost
+# zero network: two local curls, no ssh at all.
+NEED=""
+for spec in "4142 /health" "3445 /"; do
+  set -- $spec
+  alive "$1" "$2" || NEED="$NEED $1"
+done
+[ -z "$NEED" ] && exit 0          # everything healthy — no ssh, nothing logged
+
+# Something is down, so now it is worth paying for a connection. The IP is only read here, and
+# only when a rebuild is actually required; it changes on every WSL2 reboot so it cannot be cached.
+# NB: no 2>/dev/null inside the remote command. The peer's sshd hands it to Windows cmd, which
+# does not understand that redirection and fails with 'no se puede encontrar la ruta'.
 IP=$(ssh -o ConnectTimeout=10 -o BatchMode=yes -T "$PEER" 'wsl.exe hostname -I || hostname -I' 2>/dev/null | tr -d '\r' | awk '{print $1}')
 [ -z "$IP" ] && { echo "$(date '+%F %T') peer unreachable — nothing to do"; exit 0; }
 
-for spec in "4142 4042 /health" "3445 3445 /"; do
-  set -- $spec
-  LOCAL=$1; REMOTE=$2; PROBE=$3
-  if alive "$LOCAL" "$PROBE"; then continue; fi
+for LOCAL in $NEED; do
+  case "$LOCAL" in
+    4142) REMOTE=4042 ;;
+    3445) REMOTE=3445 ;;
+    *) continue ;;
+  esac
   drop "$LOCAL"
   ssh -f -N -o ConnectTimeout=15 -o BatchMode=yes -o ExitOnForwardFailure=yes \
       -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
@@ -76,7 +92,7 @@ cat > "$PLIST" <<EOF
   <key>Label</key><string>$LABEL</string>
   <key>ProgramArguments</key><array><string>/bin/sh</string><string>$BIN</string></array>
   <key>RunAtLoad</key><true/>
-  <key>StartInterval</key><integer>60</integer>
+  <key>StartInterval</key><integer>300</integer>
   <key>StandardOutPath</key><string>$LOG</string>
   <key>StandardErrorPath</key><string>$LOG</string>
 </dict>
@@ -87,6 +103,6 @@ launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 launchctl kickstart -k "gui/$(id -u)/$LABEL"
 
-echo "installed $LABEL — checks every 60s, survives reboot"
+echo "installed $LABEL — checks every 5 min (loopback only unless a tunnel is down), survives reboot"
 echo "   maintainer: $BIN"
 echo "   log:        $LOG"
